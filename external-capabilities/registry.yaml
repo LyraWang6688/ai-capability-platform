@@ -1,9 +1,9 @@
 # External Capability Domain Registry
-# Source of Truth for: external capability identity / provider / type / availability / auth model / permission model / capabilities
+# Source of Truth for: external capability identity / provider / type / availability / auth model / permission model / capabilities / version / implementation
 schema_version: 1
 
 domain: external_capabilities
-description: External capability identity, provider, type, availability, auth model, permission model, capabilities.
+description: External capability identity, provider, type, availability, auth model, permission model, capabilities, version, implementation.
 
 allowed_types:
   - plugin
@@ -30,9 +30,29 @@ capabilities: {}
 #   status         one of allowed_statuses
 #   provider_path  external-capabilities/providers/<provider>/README.md (must exist)
 # Optional (when known):
+#   version          semantic X.Y.Z — the Store-recommended version (see VERSIONING.md)
+#   implementation_path  relative repo path to a Store-managed implementation,
+#                        e.g. external-capabilities/mcp/<capability-name>/
+#                        CONDITIONAL CONTRACT: when implementation_path is present
+#                        (Store-managed / Store-owned code), the path must exist,
+#                        must live under external-capabilities/, and the entry MUST
+#                        declare a valid semantic `version`. Pure external
+#                        capabilities (third-party connectors / APIs with no
+#                        Store-hosted code) simply omit implementation_path.
 #   auth           authentication model — metadata only, NEVER secret values
 #   capabilities   what the capability can do
 #   permissions    required / verified permissions only
 #   notes          free-form notes
 #
 # No fictional providers or capabilities are registered in this skeleton.
+#
+# Documentation example (NOT registered — for contract illustration only):
+#   capabilities:
+#     feishu-cli-mcp-server:
+#       name: feishu-cli-mcp-server
+#       provider: feishu
+#       type: mcp
+#       status: available
+#       version: 0.1.0
+#       implementation_path: external-capabilities/mcp/feishu-cli-mcp-server
+#       provider_path: external-capabilities/providers/feishu/README.md

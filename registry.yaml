@@ -1,9 +1,10 @@
-# AI Capability Platform — Top-level Registry Router
+# AI Capability Store — Top-level Registry Router
 # This file ONLY routes to Domain registries. It does NOT hold Domain state.
-schema_version: 1
+# schema_version 2: `platform:` renamed to `store:` (Store rebrand, breaking).
+schema_version: 2
 
-platform:
-  name: ai-capability-platform
+store:
+  name: ai-capability-store
   owner: LyraWang6688
 
 registries:

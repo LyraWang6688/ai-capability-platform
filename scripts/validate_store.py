@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Platform Validator — deterministic structural checks
-for the AI Capability Platform.
+Store Validator — deterministic structural checks
+for the AI Capability Store.
 
 Principle:
     LLM   does semantic judgment
@@ -10,13 +10,14 @@ Principle:
 
 This validator NEVER:
     - judges whether a skill is good
+    - decides whether an asset should be published
     - auto-promotes lifecycle
     - modifies files
     - publishes anything
     - deletes resources
 
 Checks:
-    1.  top-level registry parses (YAML, schema_version == 1, platform identity)
+    1.  top-level registry parses (YAML, schema_version == 2, store identity)
     2.  router values: every route is present, is a non-empty string, and points to
         an existing file; domain registries are LOADED THROUGH the routed paths,
         so the top-level router is the true source of truth
@@ -33,6 +34,9 @@ Checks:
     8.  capability record required fields (name/provider/type/status/provider_path),
         type/status enums, map key == name, provider kebab-case,
         provider_path location and existence
+    8b. implementation_path conditional contract: when present, the path must
+        exist, must be relative with no ../, must live under external-capabilities/,
+        and the entry MUST declare a valid semantic version (Store-managed)
     9.  provider identifiers and provider directory names are lowercase kebab-case
     10. dependency registry is parsed and its top-level contract validated
     11. dependency foreign keys: skill must exist in skills registry,
@@ -47,7 +51,7 @@ secret scanner. It guards registry files only. A stronger secret gate
 (e.g. Gitleaks) should be evaluated separately if needed.
 
 Usage:
-    python3 scripts/validate_platform.py
+    python3 scripts/validate_store.py
 Exit code 0 = all checks pass; non-zero = failure.
 """
 
@@ -89,8 +93,9 @@ UniqueKeyLoader.add_constructor(
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-PRODUCT_NAME = "ai-capability-platform"
-PLATFORM_OWNER = "LyraWang6688"
+STORE_NAME = "ai-capability-store"
+STORE_OWNER = "LyraWang6688"
+STORE_SCHEMA_VERSION = 2
 
 ALLOWED_SKILL_STATUSES = {"draft", "testing", "active", "deprecated", "archived"}
 ALLOWED_CAPABILITY_TYPES = {"plugin", "mcp", "connector", "cli", "external-api", "integration"}
@@ -103,6 +108,8 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 REQUIRED_POLICY_FILES = [
     "AGENTS.md",
     "CONTRIBUTING_AI.md",
+    "PUBLISHING.md",
+    "VERSIONING.md",
     "registry.yaml",
     "skills/README.md",
     "skills/registry.yaml",
@@ -117,8 +124,8 @@ REQUIRED_POLICY_FILES = [
     "templates/skill-eval-case.yaml",
     "templates/skill-acceptance-report.md",
     "requirements-dev.txt",
-    ".github/workflows/validate-platform.yml",
-    "scripts/validate_platform.py",
+    ".github/workflows/validate-store.yml",
+    "scripts/validate_store.py",
 ]
 
 # Credential-bearing key names (the VALUE would be the secret material).
@@ -404,6 +411,31 @@ def validate_capability_entries(reg: dict):
                       f"{pp!r} (expected {expected!r})")
             check(f"capability {key} provider_path exists",
                   os.path.isfile(os.path.join(ROOT, pp)), pp)
+        # Optional semantic version (Store-recommended version, see VERSIONING.md).
+        version = entry.get("version")
+        if version is not None:
+            check(f"capability {key} version X.Y.Z",
+                  isinstance(version, str) and bool(VERSION_RE.match(version)),
+                  f"version={version!r} type={type(version).__name__}")
+        # Conditional contract: when implementation_path is present the Store
+        # hosts the code — the path must be relative, live under
+        # external-capabilities/, exist, and the entry MUST declare a version.
+        impl = entry.get("implementation_path")
+        if impl is not None and (not isinstance(impl, str) or impl):
+            if isinstance(impl, str) and impl:
+                iparts = impl.split("/")
+                check(f"capability {key} implementation_path relative",
+                      not os.path.isabs(impl) and ".." not in iparts, impl)
+                check(f"capability {key} implementation_path under external-capabilities/",
+                      impl.startswith("external-capabilities/"), impl)
+                check(f"capability {key} implementation_path exists",
+                      os.path.isdir(os.path.join(ROOT, impl)), impl)
+                check(f"capability {key} store-managed requires version",
+                      isinstance(version, str) and bool(VERSION_RE.match(version)),
+                      f"version={version!r}")
+            else:
+                check(f"capability {key} implementation_path is a string",
+                      False, f"implementation_path={impl!r}")
     return collected
 
 
@@ -441,24 +473,24 @@ def main() -> int:
     top = check_mapping(top, "top-level registry")
     if top is None:
         return report(1)
-    check("top-level registry schema_version", top.get("schema_version") == 1,
-          f"got {top.get('schema_version')!r}")
-    platform_block = top.get("platform")
-    if isinstance(platform_block, dict):
-        check("top-level platform name", platform_block.get("name") == PRODUCT_NAME,
-              repr(platform_block.get("name")))
-        check("top-level platform owner", platform_block.get("owner") == PLATFORM_OWNER,
-              repr(platform_block.get("owner")))
-        check("top-level platform has only allowed keys",
-              set(platform_block.keys()) <= {"name", "owner"},
-              f"unexpected keys: {sorted(set(platform_block.keys()) - {'name', 'owner'})}")
+    check("top-level registry schema_version", top.get("schema_version") == STORE_SCHEMA_VERSION,
+          f"got {top.get('schema_version')!r} (expected {STORE_SCHEMA_VERSION})")
+    store_block = top.get("store")
+    if isinstance(store_block, dict):
+        check("top-level store name", store_block.get("name") == STORE_NAME,
+              repr(store_block.get("name")))
+        check("top-level store owner", store_block.get("owner") == STORE_OWNER,
+              repr(store_block.get("owner")))
+        check("top-level store has only allowed keys",
+              set(store_block.keys()) <= {"name", "owner"},
+              f"unexpected keys: {sorted(set(store_block.keys()) - {'name', 'owner'})}")
     else:
-        check("top-level platform is a mapping", False, type(platform_block).__name__)
+        check("top-level store is a mapping", False, type(store_block).__name__)
     # Closed top-level schema: the router must NOT carry domain-owned state
     # (e.g. capabilities:, skill lifecycle metadata). Only router fields live here.
     check("top-level registry has only allowed keys",
-          set(top.keys()) <= {"schema_version", "platform", "registries"},
-          f"unexpected keys: {sorted(set(top.keys()) - {'schema_version', 'platform', 'registries'})}")
+          set(top.keys()) <= {"schema_version", "store", "registries"},
+          f"unexpected keys: {sorted(set(top.keys()) - {'schema_version', 'store', 'registries'})}")
 
     # ---- 2. Router values: safe route resolution ----
     # Only paths that pass Route Safety Validation may be loaded / scanned.

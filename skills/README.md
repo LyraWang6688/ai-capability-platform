@@ -2,7 +2,7 @@
 
 **Domain: Skills = How to do**
 
-A Skill is a reusable procedure / workflow / capability logic owned by the platform.
+A Skill is a reusable procedure / workflow / capability logic owned by the Store.
 It defines HOW the Agent should execute a task.
 
 ## Core Model

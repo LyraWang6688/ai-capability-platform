@@ -8,13 +8,15 @@ Before making changes:
 
 1. Read `AGENTS.md`.
 2. Read `CONTRIBUTING_AI.md` (this file).
-3. Read `registry.yaml` (top-level platform router).
-4. Read the README of the Domain being touched:
+3. Read `PUBLISHING.md` when publishing an asset.
+4. Read `VERSIONING.md` (store-wide versioning contract).
+5. Read `registry.yaml` (top-level store router).
+6. Read the README of the Domain being touched:
    - Skills work → `skills/README.md`
    - External Capability work → `external-capabilities/README.md`
-5. Read the Domain Policy of the touched area
+7. Read the Domain Policy of the touched area
    (LIFECYCLE / VERSIONING / ACCEPTANCE / SECURITY as applicable).
-6. Inspect the current target entity before editing it.
+8. Inspect the current target entity before editing it.
 
 Do not create, move, rename, deprecate, or archive an entity without checking its registry first.
 
@@ -33,9 +35,19 @@ Do not create duplicates.
 - **Skill** (reusable procedure / workflow / capability logic) → `skills/`
 - **External Capability** (plugin / MCP / connector / CLI / external API / integration) → `external-capabilities/`
 - **Skill ↔ External Capability dependency** → `dependencies/capability-map.yaml`
-- **Platform-wide policy** → top-level policy files
+- **Store-wide policy** → top-level policy files
 
 Skills and External Capabilities are **peer Domains**. A Plugin is NOT a sub-entity of a Skill.
+
+## Native Protocol vs Store Governance
+
+The Store does NOT redefine native protocols:
+
+- **Skill Protocol** defines how a Skill describes and runs itself.
+- **MCP Protocol** defines MCP Client/Server interaction.
+- The Store governs only: placement / identity / registry / version / dependency / validation / publishing / lifecycle / history / distribution metadata.
+
+Native Protocol ≠ Store Governance.
 
 ## Naming Rules
 
@@ -76,7 +88,7 @@ See `external-capabilities/SECURITY.md` for the full policy.
 | Skill identity / path / lifecycle / version | `skills/registry.yaml` |
 | External capability identity / provider / type / availability / auth / permissions | `external-capabilities/registry.yaml` |
 | Skill ↔ External Capability dependencies | `dependencies/capability-map.yaml` |
-| Platform registry routing | `registry.yaml` (top level, router only) |
+| Store registry routing | `registry.yaml` (top level, router only) |
 
 A single core fact is maintained in exactly one registry.
 
@@ -98,8 +110,8 @@ archive(skill): archive <skill-name>
 feat(capability): add <capability-name>
 update(capability): update <capability-name>
 chore(registry): update <domain> registry
-feat(platform): <platform-level change>
-docs(platform): <platform-level documentation>
+feat(store): <store-level change>
+docs(store): <store-level documentation>
 ```
 
 ## Human Approval
