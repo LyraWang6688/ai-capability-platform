@@ -51,6 +51,7 @@ Usage:
 Exit code 0 = all checks pass; non-zero = failure.
 """
 
+import datetime
 import os
 import re
 import sys
@@ -96,8 +97,9 @@ REQUIRED_POLICY_FILES = [
 ]
 
 # Credential-bearing key names (the VALUE would be the secret material).
+# Includes the bare `token` key: a standalone token field is credential-bearing.
 SECRET_KEY_RE = re.compile(
-    r"(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|secret|password|credential|cookie|auth[_-]?token|refresh[_-]?token)"
+    r"(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|secret|password|credential|cookie|auth[_-]?token|refresh[_-]?token|token)"
 )
 # Heuristic: an actual-looking secret value (>= 12 chars, not a placeholder).
 SECRET_VALUE_RE = re.compile(r"^[A-Za-z0-9_\-./+]{12,}$")
@@ -186,11 +188,32 @@ def validate_skill_entries(reg: dict, section: str):
         if section == "projects":
             required_fields.append("project")
         for field in required_fields:
-            present = field in entry and entry[field] is not None and entry[field] != ""
+            val = entry.get(field)
+            present = val is not None
             check(f"skill {section}.{key} has required field: {field}", present,
-                  f"value={entry.get(field)!r}")
+                  f"value={val!r}")
+            if present:
+                # Required field = presence + type + semantic format.
+                # `updated` is a date-typed field: bare YAML dates (2026-10-01)
+                # parse as datetime.date; quoted strings are equally valid.
+                if field == "updated":
+                    ok_type = isinstance(val, str) or isinstance(val, datetime.date)
+                else:
+                    ok_type = isinstance(val, str)
+                check(f"skill {section}.{key} required field is non-empty string: {field}",
+                      ok_type and (isinstance(val, datetime.date) or len(val) > 0),
+                      f"value={val!r} type={type(val).__name__}")
         check(f"skill {section}.{key} map key == name", key == entry.get("name"),
               f"key={key!r} name={entry.get('name')!r}")
+        check(f"skill {section}.{key} identifier kebab-case", bool(KEBAB_RE.match(key)),
+              f"key={key!r}")
+        name = entry.get("name")
+        if isinstance(name, str) and name:
+            check(f"skill {section}.{key} name kebab-case", bool(KEBAB_RE.match(name)), name)
+        project = entry.get("project")
+        if isinstance(project, str) and project:
+            check(f"skill {section}.{key} project kebab-case", bool(KEBAB_RE.match(project)),
+                  project)
         status = entry.get("status")
         if status is not None:
             check(f"skill {section}.{key} status legal", status in ALLOWED_SKILL_STATUSES,
@@ -201,6 +224,9 @@ def validate_skill_entries(reg: dict, section: str):
         updated = entry.get("updated")
         if isinstance(updated, str):
             check(f"skill {section}.{key} updated YYYY-MM-DD", bool(DATE_RE.match(updated)), updated)
+        elif isinstance(updated, datetime.date):
+            check(f"skill {section}.{key} updated YYYY-MM-DD",
+                  bool(DATE_RE.match(updated.isoformat())), updated.isoformat())
     return collected
 
 
@@ -247,11 +273,19 @@ def validate_capability_entries(reg: dict):
             continue
         collected.append((key, entry))
         for field in ("name", "provider", "type", "status", "provider_path"):
-            present = field in entry and entry[field] is not None and entry[field] != ""
+            val = entry.get(field)
+            present = val is not None
             check(f"capability {key} has required field: {field}", present,
-                  f"value={entry.get(field)!r}")
+                  f"value={val!r}")
+            if present:
+                # Required field = presence + type + semantic format.
+                check(f"capability {key} required field is non-empty string: {field}",
+                      isinstance(val, str) and len(val) > 0,
+                      f"value={val!r} type={type(val).__name__}")
         check(f"capability {key} map key == name", key == entry.get("name"),
               f"key={key!r} name={entry.get('name')!r}")
+        check(f"capability {key} identifier kebab-case", bool(KEBAB_RE.match(key)),
+              f"key={key!r}")
         ctype = entry.get("type")
         if ctype is not None:
             check(f"capability {key} type legal", ctype in ALLOWED_CAPABILITY_TYPES, f"type={ctype!r}")
@@ -381,6 +415,29 @@ def main() -> int:
         check(f"filesystem skill is registered: {rel}", rel in registered_paths,
               "package directory exists but has no registry entry")
 
+    # ---- 6b. Filesystem skill / project directory naming (kebab-case) ----
+    shared_base = os.path.join(ROOT, "skills/shared")
+    if os.path.isdir(shared_base):
+        for name in sorted(os.listdir(shared_base)):
+            if name.startswith("."):
+                continue
+            check(f"filesystem skill directory kebab-case: skills/shared/{name}",
+                  bool(KEBAB_RE.match(name)), name)
+    proj_base = os.path.join(ROOT, "skills/projects")
+    if os.path.isdir(proj_base):
+        for proj in sorted(os.listdir(proj_base)):
+            if proj.startswith("."):
+                continue
+            check(f"filesystem project directory kebab-case: skills/projects/{proj}",
+                  bool(KEBAB_RE.match(proj)), proj)
+            proj_dir = os.path.join(proj_base, proj)
+            if os.path.isdir(proj_dir):
+                for name in sorted(os.listdir(proj_dir)):
+                    if name.startswith("."):
+                        continue
+                    check(f"filesystem skill directory kebab-case: skills/projects/{proj}/{name}",
+                          bool(KEBAB_RE.match(name)), name)
+
     # ---- 7. Duplicate skill identity ----
     shared_names = {key for key, _ in shared_entries}
     proj_names = {key for key, _ in proj_entries}
@@ -410,6 +467,7 @@ def main() -> int:
     if deps_ok:
         deps = deps_reg.get("dependencies")
         if isinstance(deps, list):
+            seen_skills = set()
             for i, dep in enumerate(deps):
                 if not isinstance(dep, dict):
                     check(f"dependency {i} is a mapping", False, type(dep).__name__)
@@ -420,10 +478,15 @@ def main() -> int:
                 if isinstance(skill, str) and skill:
                     check(f"dependency {i} skill exists in skills registry",
                           skill in skill_ids, f"skill={skill!r}")
+                    # Uniqueness: one dependency entry per skill.
+                    check(f"dependency {i} skill unique in list", skill not in seen_skills,
+                          f"duplicate dependency for skill={skill!r}")
+                    seen_skills.add(skill)
                 requires = dep.get("requires")
                 check(f"dependency {i} requires is a list", isinstance(requires, list),
                       type(requires).__name__)
                 if isinstance(requires, list):
+                    seen_caps = set()
                     for j, req in enumerate(requires):
                         if not isinstance(req, dict):
                             check(f"dependency {i}.requires[{j}] is a mapping", False,
@@ -435,6 +498,11 @@ def main() -> int:
                         if isinstance(cap, str) and cap:
                             check(f"dependency {i}.requires[{j}] capability exists in capability registry",
                                   cap in capability_ids, f"capability={cap!r}")
+                            # Uniqueness: one requirement entry per capability within a skill.
+                            check(f"dependency {i}.requires[{j}] capability unique in skill",
+                                  cap not in seen_caps,
+                                  f"duplicate requirement for capability={cap!r}")
+                            seen_caps.add(cap)
                         required = req.get("required")
                         check(f"dependency {i}.requires[{j}] required is a boolean",
                               isinstance(required, bool), repr(required))
@@ -443,9 +511,15 @@ def main() -> int:
     for rel in REQUIRED_POLICY_FILES:
         check(f"required asset exists: {rel}", os.path.exists(os.path.join(ROOT, rel)))
 
-    # ---- 12. Lightweight secret scan (reference metadata exempt) ----
-    for rel in ("registry.yaml", "skills/registry.yaml",
-                "external-capabilities/registry.yaml", "dependencies/capability-map.yaml"):
+    # ---- 12. Lightweight secret scan, following the router (reference metadata exempt) ----
+    # The top-level registry.yaml plus every routed domain registry are scanned,
+    # so structured validation and security validation read the same sources.
+    scan_targets = ["registry.yaml"]
+    for domain in expected_domains:
+        val = refs.get(domain)
+        if isinstance(val, str) and val:
+            scan_targets.append(val)
+    for rel in scan_targets:
         scan_for_secrets(rel)
 
     return report(0)
