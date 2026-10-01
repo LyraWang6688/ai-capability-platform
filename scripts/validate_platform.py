@@ -157,6 +157,57 @@ def load_yaml(rel_path: str):
     return data, True
 
 
+def check_mapping(data, what):
+    """Registry root documents must be mappings.
+
+    A syntactically valid YAML document whose root is not a mapping (e.g. a
+    list, or a scalar) must yield a deterministic FAIL — never an
+    AttributeError/TypeError. Returns data when it is a dict, otherwise
+    records the FAIL and returns None; callers must only .get() when a dict.
+    """
+    if not isinstance(data, dict):
+        check(f"{what} is a mapping", False, type(data).__name__)
+        return None
+    return data
+
+
+def validate_and_resolve_route(domain, raw_value):
+    """Route Safety Validation -> validated relative repo path or None.
+
+    A route may enter load_yaml() / scan_for_secrets() ONLY after passing
+    every check here. On any failure the route FAIL is recorded and None is
+    returned; the caller must NOT read, load or scan the target file.
+
+    Guards: non-empty string, no '..' traversal, relative (no absolute path),
+    realpath resolves inside the repository root (also defeats symlink
+    escapes), and the target file exists.
+    """
+    if raw_value is None:
+        check(f"route value present: {domain}", False, "missing route value")
+        return None
+    if not isinstance(raw_value, str) or len(raw_value) == 0:
+        check(f"route value is non-empty string: {domain}", False, repr(raw_value))
+        return None
+    parts = raw_value.split("/")
+    has_dotdot = ".." in parts
+    is_abs = os.path.isabs(raw_value)
+    check(f"route value has no '..': {domain}", not has_dotdot, raw_value)
+    check(f"route value is a relative path: {domain}", not is_abs, raw_value)
+    if has_dotdot or is_abs:
+        return None
+    rel = posixpath.normpath(raw_value)
+    resolved = os.path.realpath(os.path.join(ROOT, rel))
+    root_real = os.path.realpath(ROOT)
+    inside = resolved == root_real or resolved.startswith(root_real + os.sep)
+    check(f"route resolves inside repository: {domain}", inside, raw_value)
+    if not inside:
+        return None
+    check(f"referenced registry exists: {rel}", os.path.exists(resolved), "file not found")
+    if not os.path.exists(resolved):
+        return None
+    return rel
+
+
 def scan_for_secrets(rel_path: str) -> None:
     """Lightweight heuristic secret scan on registry/data files.
 
@@ -383,74 +434,72 @@ def discover_skill_packages():
 
 
 def main() -> int:
-    # ---- 1. Top-level registry ----
+    # ---- 1. Top-level registry (root must be a mapping) ----
     top, ok = load_yaml("registry.yaml")
     if not ok:
         return report(1)
+    top = check_mapping(top, "top-level registry")
+    if top is None:
+        return report(1)
     check("top-level registry schema_version", top.get("schema_version") == 1,
           f"got {top.get('schema_version')!r}")
-    check("top-level platform name", top.get("platform", {}).get("name") == PRODUCT_NAME,
-          repr(top.get("platform", {}).get("name")))
-    check("top-level platform owner", top.get("platform", {}).get("owner") == PLATFORM_OWNER,
-          repr(top.get("platform", {}).get("owner")))
+    platform_block = top.get("platform")
+    if isinstance(platform_block, dict):
+        check("top-level platform name", platform_block.get("name") == PRODUCT_NAME,
+              repr(platform_block.get("name")))
+        check("top-level platform owner", platform_block.get("owner") == PLATFORM_OWNER,
+              repr(platform_block.get("owner")))
+        check("top-level platform has only allowed keys",
+              set(platform_block.keys()) <= {"name", "owner"},
+              f"unexpected keys: {sorted(set(platform_block.keys()) - {'name', 'owner'})}")
+    else:
+        check("top-level platform is a mapping", False, type(platform_block).__name__)
     # Closed top-level schema: the router must NOT carry domain-owned state
     # (e.g. capabilities:, skill lifecycle metadata). Only router fields live here.
     check("top-level registry has only allowed keys",
           set(top.keys()) <= {"schema_version", "platform", "registries"},
           f"unexpected keys: {sorted(set(top.keys()) - {'schema_version', 'platform', 'registries'})}")
-    platform_block = top.get("platform")
-    if isinstance(platform_block, dict):
-        check("top-level platform has only allowed keys",
-              set(platform_block.keys()) <= {"name", "owner"},
-              f"unexpected keys: {sorted(set(platform_block.keys()) - {'name', 'owner'})}")
 
-    # ---- 2. Router values: present, non-empty string, exists; load through router ----
-    refs = top.get("registries")
-    expected_domains = ("skills", "external_capabilities", "dependencies")
-    if not isinstance(refs, dict):
-        check("top-level registries is a mapping", False, type(refs).__name__)
+    # ---- 2. Router values: safe route resolution ----
+    # Only paths that pass Route Safety Validation may be loaded / scanned.
+    refs = check_mapping(top.get("registries"), "top-level registries")
+    if refs is None:
         return report(1)
+    expected_domains = ("skills", "external_capabilities", "dependencies")
     check("top-level registry routes all domains", set(refs.keys()) == set(expected_domains),
           f"routes: {sorted(refs.keys())}")
+    routed = {}
     for domain in expected_domains:
-        val = refs.get(domain)
-        check(f"route value present: {domain}", val is not None, "missing route value")
-        check(f"route value is non-empty string: {domain}",
-              isinstance(val, str) and len(val) > 0, repr(val))
-        if isinstance(val, str) and val:
-            parts = val.split("/")
-            check(f"route value has no '..': {domain}", ".." not in parts, val)
-            check(f"route value is a relative path: {domain}", not os.path.isabs(val), val)
-    # Uniqueness is checked on NORMALIZED paths: external-capabilities/registry.yaml
+        routed[domain] = validate_and_resolve_route(domain, refs.get(domain))
+    # Uniqueness is checked on NORMALIZED validated paths: external-capabilities/registry.yaml
     # and external-capabilities/../external-capabilities/registry.yaml resolve to
     # the same file and must be treated as a duplicate.
-    norm_paths = [posixpath.normpath(refs[d])
-                  for d in expected_domains if isinstance(refs.get(d), str) and refs[d]]
+    norm_paths = [routed[d] for d in expected_domains if routed[d]]
     check("registry paths not duplicated (normalized)",
           len(norm_paths) == len(set(norm_paths)),
           "duplicate registry path in top-level registries")
-    root_real = os.path.realpath(ROOT)
-    for domain in expected_domains:
-        rel = refs.get(domain)
-        if isinstance(rel, str) and rel:
-            resolved = os.path.realpath(os.path.join(ROOT, rel))
-            check(f"route resolves inside repository: {domain}",
-                  resolved == root_real or resolved.startswith(root_real + os.sep), rel)
-            check(f"referenced registry exists: {rel}", os.path.exists(resolved),
-                  "file not found")
 
     def _routed(domain):
-        """Normalized routed path for a domain, or None when unusable."""
-        rel = refs.get(domain)
-        return posixpath.normpath(rel) if isinstance(rel, str) and rel else None
+        """Validated (safe) relative repo path for a domain, or None."""
+        return routed.get(domain)
 
-    # Load domain registries THROUGH the router values (router = source of truth).
+    # Load domain registries THROUGH the validated router values
+    # (router = source of truth). Each root must be a mapping.
     skills_rel = _routed("skills")
     skills_reg, skills_ok = load_yaml(skills_rel) if skills_rel else (None, False)
+    if skills_ok:
+        skills_reg = check_mapping(skills_reg, "skills registry")
+        skills_ok = skills_reg is not None
     caps_rel = _routed("external_capabilities")
     caps_reg, caps_ok = load_yaml(caps_rel) if caps_rel else (None, False)
+    if caps_ok:
+        caps_reg = check_mapping(caps_reg, "capability registry")
+        caps_ok = caps_reg is not None
     deps_rel = _routed("dependencies")
     deps_reg, deps_ok = load_yaml(deps_rel) if deps_rel else (None, False)
+    if deps_ok:
+        deps_reg = check_mapping(deps_reg, "dependency registry")
+        deps_ok = deps_reg is not None
 
     # ---- 3. Domain registry headers ----
     if skills_ok:
@@ -603,8 +652,9 @@ def main() -> int:
         check(f"required asset exists: {rel}", os.path.exists(os.path.join(ROOT, rel)))
 
     # ---- 12. Lightweight secret scan, following the router (reference metadata exempt) ----
-    # The top-level registry.yaml plus every routed domain registry are scanned,
-    # so structured validation and security validation read the same sources.
+    # The top-level registry.yaml plus every ROUTE-SAFETY-VALIDATED domain
+    # registry are scanned, so structured validation and security validation
+    # read the same (safe) sources. Invalid routes are never scanned.
     scan_targets = ["registry.yaml"]
     for domain in expected_domains:
         rel = _routed(domain)
