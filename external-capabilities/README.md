@@ -27,9 +27,18 @@ Skills and External Capabilities are **peer Domains**. A Plugin is NOT a sub-ent
 ```text
 external-capabilities/providers/<provider-name>/README.md
 external-capabilities/use-cases/<use-case>.md
+external-capabilities/mcp/<capability-name>/     # Store-managed MCP implementations
 ```
 
 Use lowercase kebab-case for provider identifiers.
+
+Store-managed implementation shelf: the Store hosts and maintains code for some
+capabilities (e.g. its own MCP servers). Store-managed implementations live
+under `external-capabilities/mcp/<capability-name>/`. Shelves for other types
+(cli/ / connector/ / api/ / plugin/) are created only when a real asset needs
+them. The Store fixes the asset ROOT location only; it does NOT prescribe the
+internal source layout of an MCP (Node / Python / Go projects keep their own
+native structure).
 
 ## Registry
 
@@ -42,6 +51,8 @@ Use lowercase kebab-case for provider identifiers.
 - auth model
 - permission model
 - capabilities
+- version (Store-recommended version)
+- implementation (Store-managed code location)
 
 A capability record requires:
 
@@ -53,6 +64,11 @@ A capability record requires:
 
 Optional, when known:
 
+- `version`              — semantic X.Y.Z (Store-recommended version; see `VERSIONING.md`)
+- `implementation_path`  — relative repo path to Store-managed code; when present it
+                           must exist, live under `external-capabilities/`, and the
+                           entry must declare a valid `version` (Store-managed capability).
+                           Pure external capabilities omit it.
 - `auth`          — authentication model (metadata only)
 - `capabilities`  — what the capability can do
 - `permissions`   — verified permissions only
