@@ -53,6 +53,7 @@ Exit code 0 = all checks pass; non-zero = failure.
 
 import datetime
 import os
+import posixpath
 import re
 import sys
 
@@ -61,6 +62,30 @@ try:
 except ImportError:  # pragma: no cover
     sys.stderr.write("ERROR: PyYAML is required (pip install -r requirements-dev.txt)\n")
     sys.exit(2)
+
+
+# ---- Duplicate-key-detecting YAML loader ----
+# yaml.safe_load silently keeps the LAST occurrence of a duplicate mapping key,
+# hiding ambiguous or overwritten source-of-truth declarations. This loader
+# raises on any duplicate key so validation fails loudly instead.
+class UniqueKeyLoader(yaml.SafeLoader):
+    pass
+
+
+def _construct_mapping(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping", node.start_mark,
+                f"found duplicate key {key!r}", key_node.start_mark)
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_mapping)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -121,8 +146,8 @@ def load_yaml(rel_path: str):
         return None, False
     try:
         with open(path, encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-    except Exception as exc:  # noqa: BLE001
+            data = yaml.load(fh, Loader=UniqueKeyLoader)
+    except Exception as exc:  # noqa: BLE001 (includes duplicate-key ConstructorError)
         check(f"parse: {rel_path}", False, str(exc))
         return None, False
     if data is None:
@@ -223,7 +248,16 @@ def validate_skill_entries(reg: dict, section: str):
             check(f"skill {section}.{key} version X.Y.Z", bool(VERSION_RE.match(version)), version)
         updated = entry.get("updated")
         if isinstance(updated, str):
-            check(f"skill {section}.{key} updated YYYY-MM-DD", bool(DATE_RE.match(updated)), updated)
+            shape_ok = bool(DATE_RE.match(updated))
+            check(f"skill {section}.{key} updated YYYY-MM-DD", shape_ok, updated)
+            if shape_ok:
+                try:
+                    datetime.date.fromisoformat(updated)
+                    real_ok = True
+                except ValueError:
+                    real_ok = False
+                check(f"skill {section}.{key} updated is a real calendar date", real_ok,
+                      updated)
         elif isinstance(updated, datetime.date):
             check(f"skill {section}.{key} updated YYYY-MM-DD",
                   bool(DATE_RE.match(updated.isoformat())), updated.isoformat())
@@ -243,13 +277,17 @@ def validate_skill_path(key: str, entry: dict, section: str) -> None:
     leaf = path.rstrip("/").split("/")[-1]
     check(f"skill {section}.{key} path leaf == skill name", leaf == key, f"leaf={leaf!r} key={key!r}")
     if section == "shared":
+        # Exact layout: skills/shared/<skill-name>/ (3 components), no nesting.
         check(f"skill {section}.{key} path under skills/shared/",
               path.startswith("skills/shared/"), path)
+        check(f"skill {section}.{key} path has exactly 3 components", len(parts) == 3, path)
     else:
         project = entry.get("project")
         prefix = f"skills/projects/{project}/" if isinstance(project, str) else None
         check(f"skill {section}.{key} path under skills/projects/<project>/",
               bool(prefix) and path.startswith(prefix), f"path={path!r} project={project!r}")
+        # Exact layout: skills/projects/<project>/<skill-name>/ (4 components).
+        check(f"skill {section}.{key} path has exactly 4 components", len(parts) == 4, path)
     if os.path.isdir(abs_path):
         check(f"skill {section}.{key} package has SKILL.md",
               os.path.isfile(os.path.join(abs_path, "SKILL.md")), path)
@@ -361,8 +399,16 @@ def main() -> int:
         check(f"route value present: {domain}", val is not None, "missing route value")
         check(f"route value is non-empty string: {domain}",
               isinstance(val, str) and len(val) > 0, repr(val))
-    paths = [refs[d] for d in expected_domains if isinstance(refs.get(d), str)]
-    check("registry paths not duplicated", len(paths) == len(set(paths)),
+        if isinstance(val, str) and val:
+            parts = val.split("/")
+            check(f"route value has no '..': {domain}", ".." not in parts, val)
+    # Uniqueness is checked on NORMALIZED paths: external-capabilities/registry.yaml
+    # and external-capabilities/../external-capabilities/registry.yaml resolve to
+    # the same file and must be treated as a duplicate.
+    norm_paths = [posixpath.normpath(refs[d])
+                  for d in expected_domains if isinstance(refs.get(d), str) and refs[d]]
+    check("registry paths not duplicated (normalized)",
+          len(norm_paths) == len(set(norm_paths)),
           "duplicate registry path in top-level registries")
     for domain in expected_domains:
         rel = refs.get(domain)
@@ -370,10 +416,18 @@ def main() -> int:
             check(f"referenced registry exists: {rel}", os.path.exists(os.path.join(ROOT, rel)),
                   "file not found")
 
+    def _routed(domain):
+        """Normalized routed path for a domain, or None when unusable."""
+        rel = refs.get(domain)
+        return posixpath.normpath(rel) if isinstance(rel, str) and rel else None
+
     # Load domain registries THROUGH the router values (router = source of truth).
-    skills_reg, skills_ok = load_yaml(refs["skills"]) if isinstance(refs.get("skills"), str) and refs["skills"] else (None, False)
-    caps_reg, caps_ok = load_yaml(refs["external_capabilities"]) if isinstance(refs.get("external_capabilities"), str) and refs["external_capabilities"] else (None, False)
-    deps_reg, deps_ok = load_yaml(refs["dependencies"]) if isinstance(refs.get("dependencies"), str) and refs["dependencies"] else (None, False)
+    skills_rel = _routed("skills")
+    skills_reg, skills_ok = load_yaml(skills_rel) if skills_rel else (None, False)
+    caps_rel = _routed("external_capabilities")
+    caps_reg, caps_ok = load_yaml(caps_rel) if caps_rel else (None, False)
+    deps_rel = _routed("dependencies")
+    deps_reg, deps_ok = load_yaml(deps_rel) if deps_rel else (None, False)
 
     # ---- 3. Domain registry headers ----
     if skills_ok:
@@ -421,6 +475,8 @@ def main() -> int:
         for name in sorted(os.listdir(shared_base)):
             if name.startswith("."):
                 continue
+            if not os.path.isdir(os.path.join(shared_base, name)):
+                continue  # metadata files (e.g. README.md) are not skill packages
             check(f"filesystem skill directory kebab-case: skills/shared/{name}",
                   bool(KEBAB_RE.match(name)), name)
     proj_base = os.path.join(ROOT, "skills/projects")
@@ -428,15 +484,18 @@ def main() -> int:
         for proj in sorted(os.listdir(proj_base)):
             if proj.startswith("."):
                 continue
+            if not os.path.isdir(os.path.join(proj_base, proj)):
+                continue
             check(f"filesystem project directory kebab-case: skills/projects/{proj}",
                   bool(KEBAB_RE.match(proj)), proj)
             proj_dir = os.path.join(proj_base, proj)
-            if os.path.isdir(proj_dir):
-                for name in sorted(os.listdir(proj_dir)):
-                    if name.startswith("."):
-                        continue
-                    check(f"filesystem skill directory kebab-case: skills/projects/{proj}/{name}",
-                          bool(KEBAB_RE.match(name)), name)
+            for name in sorted(os.listdir(proj_dir)):
+                if name.startswith("."):
+                    continue
+                if not os.path.isdir(os.path.join(proj_dir, name)):
+                    continue  # project README.md / metadata files are not skills
+                check(f"filesystem skill directory kebab-case: skills/projects/{proj}/{name}",
+                      bool(KEBAB_RE.match(name)), name)
 
     # ---- 7. Duplicate skill identity ----
     shared_names = {key for key, _ in shared_entries}
@@ -472,6 +531,12 @@ def main() -> int:
                 if not isinstance(dep, dict):
                     check(f"dependency {i} is a mapping", False, type(dep).__name__)
                     continue
+                # Enforce the dependency entry schema: only skill + requires are
+                # allowed. Fields such as skill_version or type would recreate a
+                # second source of truth and are rejected.
+                unknown_dep = set(dep.keys()) - {"skill", "requires"}
+                check(f"dependency {i} has only allowed fields", not unknown_dep,
+                      f"unknown fields: {sorted(unknown_dep)}")
                 skill = dep.get("skill")
                 check(f"dependency {i} has skill", isinstance(skill, str) and skill,
                       f"skill={skill!r}")
@@ -492,6 +557,9 @@ def main() -> int:
                             check(f"dependency {i}.requires[{j}] is a mapping", False,
                                   type(req).__name__)
                             continue
+                        unknown_req = set(req.keys()) - {"capability", "required", "notes"}
+                        check(f"dependency {i}.requires[{j}] has only allowed fields",
+                              not unknown_req, f"unknown fields: {sorted(unknown_req)}")
                         cap = req.get("capability")
                         check(f"dependency {i}.requires[{j}] has capability",
                               isinstance(cap, str) and cap, f"capability={cap!r}")
@@ -516,9 +584,9 @@ def main() -> int:
     # so structured validation and security validation read the same sources.
     scan_targets = ["registry.yaml"]
     for domain in expected_domains:
-        val = refs.get(domain)
-        if isinstance(val, str) and val:
-            scan_targets.append(val)
+        rel = _routed(domain)
+        if rel:
+            scan_targets.append(rel)
     for rel in scan_targets:
         scan_for_secrets(rel)
 
