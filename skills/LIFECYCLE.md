@@ -58,6 +58,19 @@ deprecated -> archived
 
 Exceptional transitions are allowed only when the reason is documented in Git history.
 
+## Acceptance Requirements by Lifecycle
+
+Lifecycle status and Acceptance Gates (see `ACCEPTANCE.md`) are linked:
+
+| Lifecycle | Acceptance requirement |
+|---|---|
+| `draft` | Evaluation may be incomplete; structure may still be changing. |
+| `testing` | Gate 0 PASS, Critical Safety PASS, at least one real or representative task evidence; other gates may continue to accumulate. |
+| `active` | Gate 0–5 satisfy active promotion requirements, Gate 6 metrics recorded (when applicable), no blocking issue, Human Approval. |
+| `deprecated` / `archived` | Existing semantics above; a deprecated skill may document its replacement in the registry. |
+
+This intentionally avoids requiring every gate to pass before a skill can enter `testing`.
+
 ## Version Guidance
 
 Use semantic-style versions:

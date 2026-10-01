@@ -1,4 +1,4 @@
-# AI Contribution Protocol
+# AI Contribution Protocol — Public Rules
 
 This file defines the required operating rules for any AI system modifying this repository.
 
@@ -6,32 +6,36 @@ This file defines the required operating rules for any AI system modifying this 
 
 Before making changes:
 
-1. Read `CONTRIBUTING_AI.md`.
-2. Read `registry.yaml`.
-3. Read `LIFECYCLE.md`.
-4. Inspect the target project or skill before editing it.
+1. Read `AGENTS.md`.
+2. Read `CONTRIBUTING_AI.md` (this file).
+3. Read `registry.yaml` (top-level platform router).
+4. Read the README of the Domain being touched:
+   - Skills work → `skills/README.md`
+   - External Capability work → `external-capabilities/README.md`
+5. Read the Domain Policy of the touched area
+   (LIFECYCLE / VERSIONING / ACCEPTANCE / SECURITY as applicable).
+6. Inspect the current target entity before editing it.
 
-Do not create, move, rename, deprecate, or archive a skill without checking the registry first.
+Do not create, move, rename, deprecate, or archive an entity without checking its registry first.
 
-## Placement Rules
+## Reuse Scan
 
-### Project-specific skill
+Before adding anything, determine whether the requested capability already exists in:
 
-Place a skill under:
+- `skills/registry.yaml`
+- `external-capabilities/registry.yaml`
+- `dependencies/capability-map.yaml`
 
-```text
-projects/<project-name>/<skill-name>/
-```
+Do not create duplicates.
 
-### Cross-project reusable skill
+## Domain Routing
 
-Place a reusable skill under:
+- **Skill** (reusable procedure / workflow / capability logic) → `skills/`
+- **External Capability** (plugin / MCP / connector / CLI / external API / integration) → `external-capabilities/`
+- **Skill ↔ External Capability dependency** → `dependencies/capability-map.yaml`
+- **Platform-wide policy** → top-level policy files
 
-```text
-shared/<skill-name>/
-```
-
-Do not duplicate the same skill across multiple projects. Move genuinely reusable skills to `shared/`.
+Skills and External Capabilities are **peer Domains**. A Plugin is NOT a sub-entity of a Skill.
 
 ## Naming Rules
 
@@ -39,6 +43,7 @@ Use lowercase kebab-case for:
 
 - project directories
 - skill directories
+- capability / provider identifiers
 - machine-readable identifiers
 
 Examples:
@@ -49,65 +54,39 @@ meeting-analysis
 web-research
 ```
 
-## Skill Structure
+## Scope Control
 
-Each skill must contain at least:
+- Make the smallest coherent change.
+- Do not change unrelated files.
+- Preserve Git history; do not silently overwrite unrelated work.
 
-```text
-<skill-name>/
-├── SKILL.md
-└── agents/
-    └── openai.yaml
-```
+## Secret Protection
 
-Add these only when needed:
+Do not store secrets, tokens, cookies, passwords, client secrets, or private credentials in this repository — in any file, commit message, or history.
 
-- `scripts/` for deterministic executable logic
-- `references/` for documentation or knowledge loaded on demand
-- `assets/` for templates, icons, images, or other output resources
+Allowed: authentication **metadata** (auth type, required scopes, permission description, secret reference name).
+Never allowed: secret **values**.
 
-Keep `SKILL.md` focused. Do not use it as a project knowledge dump.
+See `external-capabilities/SECURITY.md` for the full policy.
 
-## Add or Update Workflow
+## Source of Truth
 
-For every contribution:
+| State | Owner |
+|---|---|
+| Skill identity / path / lifecycle / version | `skills/registry.yaml` |
+| External capability identity / provider / type / availability / auth / permissions | `external-capabilities/registry.yaml` |
+| Skill ↔ External Capability dependencies | `dependencies/capability-map.yaml` |
+| Platform registry routing | `registry.yaml` (top level, router only) |
 
-1. Determine whether the requested capability already exists.
-2. Determine whether it is project-specific or shared.
-3. Read the existing skill before changing it.
-4. Make the smallest coherent change.
-5. Update `registry.yaml`.
-6. Update the project `README.md` when project membership changes.
-7. Preserve Git history; do not silently overwrite or replace unrelated work.
-8. Use a clear commit message.
+A single core fact is maintained in exactly one registry.
 
-## Registry Requirements
+## Git Branch / Commit / PR
 
-Every registered skill should include:
+- Do not push directly to `main`. Work on a feature branch.
+- One coherent change per commit; use a clear commit message.
+- Open a PR for review. Do not merge without approval.
 
-- `name`
-- `path`
-- `status`
-- `version`
-- `updated`
-
-Project-specific skills should also be associated with a project.
-
-## Lifecycle Rules
-
-Only use these statuses:
-
-- `draft`
-- `testing`
-- `active`
-- `deprecated`
-- `archived`
-
-Follow transition rules in `LIFECYCLE.md`.
-
-## Commit Message Convention
-
-Use one of these patterns:
+Commit message convention:
 
 ```text
 feat(skill): add <skill-name>
@@ -116,17 +95,44 @@ fix(skill): fix <skill-name>
 move(skill): move <skill-name>
 deprecate(skill): deprecate <skill-name>
 archive(skill): archive <skill-name>
-chore(registry): update skill registry
+feat(capability): add <capability-name>
+update(capability): update <capability-name>
+chore(registry): update <domain> registry
+feat(platform): <platform-level change>
+docs(platform): <platform-level documentation>
 ```
+
+## Human Approval
+
+High-risk operations require explicit human approval:
+
+- lifecycle promotions
+- capability status changes
+- moving / archiving / deleting entities
+- any change affecting permissions or authentication
+- any change to the dependency contract
+
+## No Unrelated Changes
+
+Each contribution touches exactly the files its stated goal requires.
+
+## Domain-Specific Rules
+
+- Contributing a **Skill** → read `skills/**` policy:
+  `skills/LIFECYCLE.md`, `skills/VERSIONING.md`, `skills/ACCEPTANCE.md`
+- Contributing an **External Capability** → read `external-capabilities/**` policy:
+  `external-capabilities/SECURITY.md`
+- Modifying **dependencies** between the two → read `dependencies/capability-map.yaml`
 
 ## Safety Rules
 
 Do not:
 
-- create duplicate skills without checking the registry
-- mix unrelated capabilities into one skill
+- create duplicate skills or capabilities without checking the registry
+- mix unrelated capabilities into one skill or record
 - store secrets, tokens, passwords, or credentials
+- claim permissions that have not been verified
 - change unrelated files
-- invent project ownership or lifecycle status when it is unknown
+- invent project ownership, provider, or lifecycle status when it is unknown
 
 When required information is missing, stop and ask for clarification instead of guessing.

@@ -1,0 +1,38 @@
+# External Capability Domain Registry
+# Source of Truth for: external capability identity / provider / type / availability / auth model / permission model / capabilities
+schema_version: 1
+
+domain: external_capabilities
+description: External capability identity, provider, type, availability, auth model, permission model, capabilities.
+
+allowed_types:
+  - plugin
+  - mcp
+  - connector
+  - cli
+  - external-api
+  - integration
+
+allowed_statuses:
+  - available
+  - limited
+  - disabled
+  - unknown
+
+capabilities: {}
+
+# External Capability Registry Schema (v1)
+# capabilities is a mapping keyed by capability identifier (map key == name).
+# Required fields per entry:
+#   name           == map key, lowercase kebab-case
+#   provider       provider identifier (lowercase kebab-case)
+#   type           one of allowed_types
+#   status         one of allowed_statuses
+#   provider_path  external-capabilities/providers/<provider>/README.md (must exist)
+# Optional (when known):
+#   auth           authentication model — metadata only, NEVER secret values
+#   capabilities   what the capability can do
+#   permissions    required / verified permissions only
+#   notes          free-form notes
+#
+# No fictional providers or capabilities are registered in this skeleton.

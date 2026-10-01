@@ -1,0 +1,36 @@
+# Capability Dependency Contract — V0.1
+# Source of Truth for: Skill ↔ External Capability dependencies.
+#
+# External Capability Type is owned by external-capabilities/registry.yaml
+# and is NOT duplicated here.
+# Skill version is owned by skills/registry.yaml and is NOT duplicated here.
+# Historical dependency state lives in Git history / tags.
+
+schema_version: 1
+
+dependencies: []
+
+# A dependency entry:
+#   - skill: <skill-name>              # must exist in skills/registry.yaml
+#     requires:
+#       - capability: <capability-name>    # must exist in external-capabilities/registry.yaml
+#         required: true | false
+#         notes: optional free-form
+#
+# Uniqueness contract (validated by scripts/validate_platform.py):
+#   - one dependency entry per skill
+#   - one requirement entry per capability within a skill
+# No precedence is defined: ambiguity fails validation.
+#
+# Example (documentation only — do not register fictional data):
+#   - skill: web-research
+#     requires:
+#       - capability: browser-mcp
+#         required: true
+#         notes: used for authenticated page interaction
+
+# Future answer this contract enables:
+#   "Which external capabilities does Skill X require?"
+#
+# V0.1 establishes the contract only.
+# No automatic dependency resolver in V0.1.

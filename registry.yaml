@@ -1,16 +1,12 @@
+# AI Capability Platform — Top-level Registry Router
+# This file ONLY routes to Domain registries. It does NOT hold Domain state.
 schema_version: 1
 
-repository:
-  name: skill-lifecycle-hub
+platform:
+  name: ai-capability-platform
   owner: LyraWang6688
 
-projects: {}
-
-shared: {}
-
-allowed_statuses:
-  - draft
-  - testing
-  - active
-  - deprecated
-  - archived
+registries:
+  skills: skills/registry.yaml
+  external_capabilities: external-capabilities/registry.yaml
+  dependencies: dependencies/capability-map.yaml

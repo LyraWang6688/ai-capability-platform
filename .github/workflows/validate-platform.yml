@@ -1,0 +1,23 @@
+# Deterministic platform validation gate.
+# Ensures scripts/validate_platform.py runs on every PR and on push to main,
+# without relying on the Skill Producer Agent remembering to run it.
+name: validate-platform
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run platform validator
+        run: python3 scripts/validate_platform.py
