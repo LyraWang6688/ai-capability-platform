@@ -14,4 +14,13 @@ non_critical_expectations:
   - <expectation with v0.1 target >= 90%>
 evidence_required:
   - <evidence type, e.g. tool trace, artifact inspection, validator output>
+# Gate 3 — Execution / Trajectory (required for type: task; optional otherwise)
+required_steps:            # steps that MUST be observed, in order
+  - <step>
+forbidden_steps:           # steps that MUST NOT occur
+  - <step>
+required_tools:            # tools that MUST be used
+  - <tool>
+approval_points:           # points where human approval is required
+  - <approval point>
 notes: <optional>

@@ -246,6 +246,14 @@ def validate_skill_entries(reg: dict, section: str):
         version = entry.get("version")
         if isinstance(version, str):
             check(f"skill {section}.{key} version X.Y.Z", bool(VERSION_RE.match(version)), version)
+            if VERSION_RE.match(version):
+                # VERSIONING.md: 0.x is experimental/draft/testing, 1.x+ is
+                # required for active; an experimental version must not be
+                # marked active.
+                major = int(version.split(".")[0])
+                check(f"skill {section}.{key} active requires major >= 1",
+                      status != "active" or major >= 1,
+                      f"status={status!r} version={version}")
         updated = entry.get("updated")
         if isinstance(updated, str):
             shape_ok = bool(DATE_RE.match(updated))
@@ -385,6 +393,16 @@ def main() -> int:
           repr(top.get("platform", {}).get("name")))
     check("top-level platform owner", top.get("platform", {}).get("owner") == PLATFORM_OWNER,
           repr(top.get("platform", {}).get("owner")))
+    # Closed top-level schema: the router must NOT carry domain-owned state
+    # (e.g. capabilities:, skill lifecycle metadata). Only router fields live here.
+    check("top-level registry has only allowed keys",
+          set(top.keys()) <= {"schema_version", "platform", "registries"},
+          f"unexpected keys: {sorted(set(top.keys()) - {'schema_version', 'platform', 'registries'})}")
+    platform_block = top.get("platform")
+    if isinstance(platform_block, dict):
+        check("top-level platform has only allowed keys",
+              set(platform_block.keys()) <= {"name", "owner"},
+              f"unexpected keys: {sorted(set(platform_block.keys()) - {'name', 'owner'})}")
 
     # ---- 2. Router values: present, non-empty string, exists; load through router ----
     refs = top.get("registries")
@@ -402,6 +420,7 @@ def main() -> int:
         if isinstance(val, str) and val:
             parts = val.split("/")
             check(f"route value has no '..': {domain}", ".." not in parts, val)
+            check(f"route value is a relative path: {domain}", not os.path.isabs(val), val)
     # Uniqueness is checked on NORMALIZED paths: external-capabilities/registry.yaml
     # and external-capabilities/../external-capabilities/registry.yaml resolve to
     # the same file and must be treated as a duplicate.
@@ -410,10 +429,14 @@ def main() -> int:
     check("registry paths not duplicated (normalized)",
           len(norm_paths) == len(set(norm_paths)),
           "duplicate registry path in top-level registries")
+    root_real = os.path.realpath(ROOT)
     for domain in expected_domains:
         rel = refs.get(domain)
         if isinstance(rel, str) and rel:
-            check(f"referenced registry exists: {rel}", os.path.exists(os.path.join(ROOT, rel)),
+            resolved = os.path.realpath(os.path.join(ROOT, rel))
+            check(f"route resolves inside repository: {domain}",
+                  resolved == root_real or resolved.startswith(root_real + os.sep), rel)
+            check(f"referenced registry exists: {rel}", os.path.exists(resolved),
                   "file not found")
 
     def _routed(domain):
