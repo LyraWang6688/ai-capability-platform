@@ -1,25 +1,26 @@
 # Capability Dependency Contract — V0.1
 # Source of Truth for: Skill ↔ External Capability dependencies.
+#
+# External Capability Type is owned by external-capabilities/registry.yaml
+# and is NOT duplicated here.
+# Skill version is owned by skills/registry.yaml and is NOT duplicated here.
+# Historical dependency state lives in Git history / tags.
 
 schema_version: 1
 
 dependencies: []
 
-# A single dependency entry expresses:
-#   skill: <skill-name>
-#   skill_version: <x.y.z>
-#   requires:
-#     - capability: <external-capability-name>
-#       type: <plugin | mcp | connector | cli | external-api | integration>
-#       required: true | false
-#       notes: <optional free-form>
+# A dependency entry:
+#   - skill: <skill-name>              # must exist in skills/registry.yaml
+#     requires:
+#       - capability: <capability-name>    # must exist in external-capabilities/registry.yaml
+#         required: true | false
+#         notes: optional free-form
 #
 # Example (documentation only — do not register fictional data):
 #   - skill: web-research
-#     skill_version: 1.2.0
 #     requires:
 #       - capability: browser-mcp
-#         type: mcp
 #         required: true
 #         notes: used for authenticated page interaction
 

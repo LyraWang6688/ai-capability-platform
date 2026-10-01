@@ -1,6 +1,6 @@
-# Personal AI Capability Platform
+# AI Capability Platform
 
-This repository manages long-term reusable **Personal AI Capabilities**.
+This repository manages long-term reusable **AI Capabilities**.
 
 ## Core Model
 
@@ -34,7 +34,7 @@ Skill → Required External Capabilities
 ## Repository Structure
 
 ```text
-personal-ai-capability-platform/
+ai-capability-platform/
 ├── AGENTS.md                       # Control Plane / Router for Agents
 ├── README.md
 ├── CONTRIBUTING_AI.md              # Public contribution rules
@@ -56,7 +56,10 @@ personal-ai-capability-platform/
 ├── dependencies/
 │   └── capability-map.yaml
 ├── tests/                          # Development / Evaluation Layer
-├── templates/
+├── templates/                      # skill-eval-case.yaml / skill-acceptance-report.md
+├── requirements-dev.txt            # Dev dependencies (PyYAML)
+├── .github/workflows/
+│   └── validate-platform.yml       # Deterministic CI gate
 └── scripts/
     └── validate_platform.py        # Deterministic structural validator
 ```
@@ -73,7 +76,12 @@ personal-ai-capability-platform/
 ## Navigation
 
 - **Contribute**: read `AGENTS.md` and `CONTRIBUTING_AI.md` first.
-- **Validate**: run `python3 scripts/validate_platform.py`.
+- **Validate**: install dev dependencies and run the deterministic validator:
+  ```bash
+  pip install -r requirements-dev.txt
+  python3 scripts/validate_platform.py
+  ```
+  The same gate runs automatically via `.github/workflows/validate-platform.yml` on every PR and push to `main`.
 - **Skill rules**: `skills/` (LIFECYCLE, VERSIONING, ACCEPTANCE).
 - **External capability rules**: `external-capabilities/` (SECURITY).
 - **Dependencies**: `dependencies/capability-map.yaml`.

@@ -21,14 +21,18 @@ allowed_statuses:
 
 capabilities: {}
 
-# A capability record supports these fields (when known):
-#   name:          capability identifier (lowercase kebab-case)
-#   provider:      provider identifier
-#   status:        one of allowed_statuses
-#   auth:          authentication model — metadata only, NEVER secret values
-#   capabilities:  what the capability can do
-#   permissions:   required / verified permissions only
-#   provider_path: relative path to the provider record under providers/
-#   notes:         free-form notes
+# External Capability Registry Schema (v1)
+# capabilities is a mapping keyed by capability identifier (map key == name).
+# Required fields per entry:
+#   name           == map key, lowercase kebab-case
+#   provider       provider identifier (lowercase kebab-case)
+#   type           one of allowed_types
+#   status         one of allowed_statuses
+#   provider_path  external-capabilities/providers/<provider>/README.md (must exist)
+# Optional (when known):
+#   auth           authentication model — metadata only, NEVER secret values
+#   capabilities   what the capability can do
+#   permissions    required / verified permissions only
+#   notes          free-form notes
 #
 # No fictional providers or capabilities are registered in this skeleton.

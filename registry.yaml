@@ -1,9 +1,9 @@
-# Personal AI Capability Platform — Top-level Registry Router
+# AI Capability Platform — Top-level Registry Router
 # This file ONLY routes to Domain registries. It does NOT hold Domain state.
 schema_version: 1
 
 platform:
-  name: personal-ai-capability-platform
+  name: ai-capability-platform
   owner: LyraWang6688
 
 registries:

@@ -43,16 +43,20 @@ Use lowercase kebab-case for provider identifiers.
 - permission model
 - capabilities
 
-A capability record supports these fields (when known):
+A capability record requires:
 
-- `name`
-- `provider`
-- `status`
-- `auth`
-- `capabilities`
-- `permissions`
-- `provider_path`
-- `notes`
+- `name`          — capability identifier (lowercase kebab-case, == map key)
+- `provider`      — provider identifier (lowercase kebab-case)
+- `type`          — one of: plugin / mcp / connector / cli / external-api / integration
+- `status`        — one of: available / limited / disabled / unknown
+- `provider_path` — `external-capabilities/providers/<provider>/README.md` (must exist)
+
+Optional, when known:
+
+- `auth`          — authentication model (metadata only)
+- `capabilities`  — what the capability can do
+- `permissions`   — verified permissions only
+- `notes`         — free-form notes
 
 Do not invent unknown permissions or authentication methods.
 

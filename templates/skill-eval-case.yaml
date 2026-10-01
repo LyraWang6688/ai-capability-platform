@@ -1,0 +1,17 @@
+# Skill Evaluation Case Template — v0.1
+# One case per file. Place under: tests/skills/<skill-name>/cases/
+# No complex Eval DSL — keep it flat and readable.
+
+id: <case-id>                     # unique within the skill, e.g. trigger-positive-001
+skill: <skill-name>               # must exist in skills/registry.yaml
+version: <x.y.z>                  # skill version under evaluation
+type: <trigger-positive | trigger-negative | task | safety | regression>
+prompt: <prompt / input for the case>
+expected_outcome: <expected outcome>
+critical_expectations:
+  - <expectation that must be 100% PASS>
+non_critical_expectations:
+  - <expectation with v0.1 target >= 90%>
+evidence_required:
+  - <evidence type, e.g. tool trace, artifact inspection, validator output>
+notes: <optional>

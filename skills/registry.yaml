@@ -16,9 +16,33 @@ allowed_statuses:
   - deprecated
   - archived
 
-# Required fields per skill entry (when registered):
-#   name:      skill identifier (lowercase kebab-case)
-#   path:      relative path to the skill directory
-#   status:    one of allowed_statuses
-#   version:   semantic X.Y.Z (see VERSIONING.md)
-#   updated:   last update date (YYYY-MM-DD)
+# Skill Registry Schema (v1)
+# projects and shared are mappings keyed by Skill identifier (map key == name).
+# Required fields per entry:
+#   name      == map key, lowercase kebab-case
+#   path      relative repo path, a directory under the correct domain
+#             (skills/shared/<name>/ or skills/projects/<project>/<name>/)
+#             containing SKILL.md and agents/openai.yaml
+#   status    one of allowed_statuses
+#   version   semantic X.Y.Z (see VERSIONING.md)
+#   updated   YYYY-MM-DD
+# projects entries additionally require:
+#   project   owning project identifier (lowercase kebab-case)
+#
+# Example (shared):
+#   shared:
+#     repo-hygiene:
+#       name: repo-hygiene
+#       path: skills/shared/repo-hygiene
+#       status: testing
+#       version: 0.1.0
+#       updated: 2026-10-01
+# Example (project-specific):
+#   projects:
+#     meeting-analysis:
+#       name: meeting-analysis
+#       project: meeting-agent
+#       path: skills/projects/meeting-agent/meeting-analysis
+#       status: testing
+#       version: 0.1.0
+#       updated: 2026-10-01

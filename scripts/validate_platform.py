@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Platform Validator — deterministic structural checks
-for the Personal AI Capability Platform.
+for the AI Capability Platform.
 
 Principle:
     LLM   does semantic judgment
@@ -16,15 +16,35 @@ This validator NEVER:
     - deletes resources
 
 Checks:
-    1. top-level registry parses (YAML, schema_version == 1)
-    2. referenced registries exist (skills / external_capabilities / dependencies)
-    3. referenced registry paths are not duplicated
-    4. skill lifecycle status is legal (allowed_statuses)
-    5. external capability status / type are legal
-    6. registered paths exist on disk
-    7. basic naming compliance (lowercase kebab-case)
-    8. required policy files exist
-    9. lightweight secret scan on registry files
+    1.  top-level registry parses (YAML, schema_version == 1, platform identity)
+    2.  router values: every route is present, is a non-empty string, and points to
+        an existing file; domain registries are LOADED THROUGH the routed paths,
+        so the top-level router is the true source of truth
+    3.  domain registry headers (schema_version / domain / dependencies contract)
+    4.  skill registry required fields (name/path/status/version/updated,
+        + project for projects entries), map key == name, version X.Y.Z,
+        updated YYYY-MM-DD, status legal
+    5.  skill path validation: relative path, no ../ escape, directory,
+        under the correct domain prefix, leaf == skill name,
+        package contains SKILL.md and agents/openai.yaml
+    6.  registry <-> filesystem symmetry: a skill package directory on disk
+        without a registry entry FAILS (and vice versa)
+    7.  duplicate skill identity across projects/shared FAILS
+    8.  capability record required fields (name/provider/type/status/provider_path),
+        type/status enums, map key == name, provider kebab-case,
+        provider_path location and existence
+    9.  provider identifiers and provider directory names are lowercase kebab-case
+    10. dependency registry is parsed and its top-level contract validated
+    11. dependency foreign keys: skill must exist in skills registry,
+        capability must exist in external capabilities registry,
+        required must be a boolean
+    12. secret scan: only credential-bearing fields are flagged;
+        reference-name metadata (e.g. secret_reference: production-github-token)
+        is permitted and NOT flagged
+
+NOTE on the secret scan: it is a LIGHTWEIGHT HEURISTIC, not a full repository
+secret scanner. It guards registry files only. A stronger secret gate
+(e.g. Gitleaks) should be evaluated separately if needed.
 
 Usage:
     python3 scripts/validate_platform.py
@@ -38,15 +58,21 @@ import sys
 try:
     import yaml
 except ImportError:  # pragma: no cover
-    sys.stderr.write("ERROR: PyYAML is required (pip install pyyaml)\n")
+    sys.stderr.write("ERROR: PyYAML is required (pip install -r requirements-dev.txt)\n")
     sys.exit(2)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+PRODUCT_NAME = "ai-capability-platform"
+PLATFORM_OWNER = "LyraWang6688"
+
 ALLOWED_SKILL_STATUSES = {"draft", "testing", "active", "deprecated", "archived"}
 ALLOWED_CAPABILITY_TYPES = {"plugin", "mcp", "connector", "cli", "external-api", "integration"}
 ALLOWED_CAPABILITY_STATUSES = {"available", "limited", "disabled", "unknown"}
+
 KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 REQUIRED_POLICY_FILES = [
     "AGENTS.md",
@@ -62,15 +88,20 @@ REQUIRED_POLICY_FILES = [
     "external-capabilities/SECURITY.md",
     "dependencies/capability-map.yaml",
     "tests/README.md",
+    "templates/skill-eval-case.yaml",
+    "templates/skill-acceptance-report.md",
+    "requirements-dev.txt",
+    ".github/workflows/validate-platform.yml",
     "scripts/validate_platform.py",
 ]
 
-# Key names that indicate a possible secret value (case-insensitive).
+# Credential-bearing key names (the VALUE would be the secret material).
 SECRET_KEY_RE = re.compile(
-    r"(?i)(api[_-]?key|secret|token|password|client[_-]?secret|credential|cookie)"
+    r"(?i)(api[_-]?key|access[_-]?token|client[_-]?secret|secret|password|credential|cookie|auth[_-]?token|refresh[_-]?token)"
 )
-# Heuristic: an actual-looking secret value (>= 12 chars, not a placeholder/doc string).
+# Heuristic: an actual-looking secret value (>= 12 chars, not a placeholder).
 SECRET_VALUE_RE = re.compile(r"^[A-Za-z0-9_\-./+]{12,}$")
+PLACEHOLDER_VALUES = {"null", "none", "true", "false", "example", "xxx", "placeholder", "n/a", "na", "empty"}
 
 checks: list[tuple[str, bool, str]] = []
 
@@ -80,22 +111,36 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 
 def load_yaml(rel_path: str):
+    """Load YAML. FAILS on missing, unparseable, or EMPTY documents.
+    Returns (data, ok); data is None when not ok."""
     path = os.path.join(ROOT, rel_path)
     if not os.path.exists(path):
         check(f"exists: {rel_path}", False, "file not found")
-        return None
+        return None, False
     try:
         with open(path, encoding="utf-8") as fh:
-            return yaml.safe_load(fh)
+            data = yaml.safe_load(fh)
     except Exception as exc:  # noqa: BLE001
         check(f"parse: {rel_path}", False, str(exc))
-        return None
+        return None, False
+    if data is None:
+        check(f"non-empty registry: {rel_path}", False,
+              "document is empty (yaml.safe_load returned None)")
+        return None, False
+    return data, True
 
 
 def scan_for_secrets(rel_path: str) -> None:
-    """Scan registry/data files for key: value patterns that look like real secrets."""
+    """Lightweight heuristic secret scan on registry/data files.
+
+    Reference-name metadata fields (e.g. secret_reference: production-github-token)
+    are permitted authentication metadata and are NOT flagged. Only
+    credential-bearing key: value pairs with real-looking values are flagged.
+    This is a heuristic, NOT a full repository secret scanner."""
+    if not rel_path.endswith((".yaml", ".yml", ".json")):
+        return
     path = os.path.join(ROOT, rel_path)
-    if not os.path.exists(path) or not rel_path.endswith((".yaml", ".yml", ".json")):
+    if not os.path.exists(path):
         return
     try:
         with open(path, encoding="utf-8") as fh:
@@ -111,118 +156,294 @@ def scan_for_secrets(rel_path: str) -> None:
         if not m:
             continue
         key, value = m.group(1), m.group(2)
-        if SECRET_KEY_RE.search(key) and SECRET_VALUE_RE.match(value):
-            if value.lower() not in ("null", "none", "true", "false", "example", "xxx", "placeholder"):
+        k = key.lower()
+        # Permitted authentication metadata: reference-name fields, never flagged.
+        if k.endswith("_reference") or k.endswith("_ref") or k in ("reference", "ref"):
+            continue
+        if SECRET_KEY_RE.search(k) and SECRET_VALUE_RE.match(value):
+            if value.lower() not in PLACEHOLDER_VALUES:
                 hits.append(f"{rel_path}:{lineno} ({key})")
     check(f"secret scan: {rel_path}", not hits, "; ".join(hits) if hits else "clean")
 
 
-def walk_map_entries(data, container_key):
-    """Return list of dict entries from a mapping keyed by name -> entry dict."""
-    entries = []
-    if not isinstance(data, dict):
-        return entries
-    for name, entry in (data.get(container_key) or {}).items():
-        if isinstance(entry, dict):
-            entries.append((name, entry))
-        else:
-            entries.append((name, {}))
-    return entries
+def validate_skill_entries(reg: dict, section: str):
+    """Validate the required-field schema of every skill record in a section.
+    Returns list of (key, entry)."""
+    entries_section = reg.get(section)
+    if entries_section is None:
+        check(f"skill registry has {section} section", False, "missing section")
+        return []
+    if not isinstance(entries_section, dict):
+        check(f"skill registry {section} is a mapping", False, type(entries_section).__name__)
+        return []
+    collected = []
+    for key, entry in entries_section.items():
+        if not isinstance(entry, dict):
+            check(f"skill record is a mapping: {section}.{key}", False, type(entry).__name__)
+            continue
+        collected.append((key, entry))
+        required_fields = ["name", "path", "status", "version", "updated"]
+        if section == "projects":
+            required_fields.append("project")
+        for field in required_fields:
+            present = field in entry and entry[field] is not None and entry[field] != ""
+            check(f"skill {section}.{key} has required field: {field}", present,
+                  f"value={entry.get(field)!r}")
+        check(f"skill {section}.{key} map key == name", key == entry.get("name"),
+              f"key={key!r} name={entry.get('name')!r}")
+        status = entry.get("status")
+        if status is not None:
+            check(f"skill {section}.{key} status legal", status in ALLOWED_SKILL_STATUSES,
+                  f"status={status!r}")
+        version = entry.get("version")
+        if isinstance(version, str):
+            check(f"skill {section}.{key} version X.Y.Z", bool(VERSION_RE.match(version)), version)
+        updated = entry.get("updated")
+        if isinstance(updated, str):
+            check(f"skill {section}.{key} updated YYYY-MM-DD", bool(DATE_RE.match(updated)), updated)
+    return collected
+
+
+def validate_skill_path(key: str, entry: dict, section: str) -> None:
+    """Path must be a relative, contained directory with required package files."""
+    path = entry.get("path")
+    if not isinstance(path, str) or not path:
+        return
+    check(f"skill {section}.{key} path is relative", not os.path.isabs(path), path)
+    parts = path.split("/")
+    check(f"skill {section}.{key} path has no '..'", ".." not in parts, path)
+    abs_path = os.path.join(ROOT, path)
+    check(f"skill {section}.{key} path is a directory", os.path.isdir(abs_path), path)
+    leaf = path.rstrip("/").split("/")[-1]
+    check(f"skill {section}.{key} path leaf == skill name", leaf == key, f"leaf={leaf!r} key={key!r}")
+    if section == "shared":
+        check(f"skill {section}.{key} path under skills/shared/",
+              path.startswith("skills/shared/"), path)
+    else:
+        project = entry.get("project")
+        prefix = f"skills/projects/{project}/" if isinstance(project, str) else None
+        check(f"skill {section}.{key} path under skills/projects/<project>/",
+              bool(prefix) and path.startswith(prefix), f"path={path!r} project={project!r}")
+    if os.path.isdir(abs_path):
+        check(f"skill {section}.{key} package has SKILL.md",
+              os.path.isfile(os.path.join(abs_path, "SKILL.md")), path)
+        check(f"skill {section}.{key} package has agents/openai.yaml",
+              os.path.isfile(os.path.join(abs_path, "agents", "openai.yaml")), path)
+
+
+def validate_capability_entries(reg: dict):
+    """Validate capability record schema. Returns list of (key, entry)."""
+    caps = reg.get("capabilities")
+    if caps is None:
+        check("capability registry has capabilities section", False, "missing section")
+        return []
+    if not isinstance(caps, dict):
+        check("capability registry capabilities is a mapping", False, type(caps).__name__)
+        return []
+    collected = []
+    for key, entry in caps.items():
+        if not isinstance(entry, dict):
+            check(f"capability record is a mapping: {key}", False, type(entry).__name__)
+            continue
+        collected.append((key, entry))
+        for field in ("name", "provider", "type", "status", "provider_path"):
+            present = field in entry and entry[field] is not None and entry[field] != ""
+            check(f"capability {key} has required field: {field}", present,
+                  f"value={entry.get(field)!r}")
+        check(f"capability {key} map key == name", key == entry.get("name"),
+              f"key={key!r} name={entry.get('name')!r}")
+        ctype = entry.get("type")
+        if ctype is not None:
+            check(f"capability {key} type legal", ctype in ALLOWED_CAPABILITY_TYPES, f"type={ctype!r}")
+        status = entry.get("status")
+        if status is not None:
+            check(f"capability {key} status legal", status in ALLOWED_CAPABILITY_STATUSES,
+                  f"status={status!r}")
+        provider = entry.get("provider")
+        if isinstance(provider, str) and provider:
+            check(f"capability {key} provider kebab-case", bool(KEBAB_RE.match(provider)), provider)
+        pp = entry.get("provider_path")
+        if isinstance(pp, str) and pp:
+            parts = pp.split("/")
+            check(f"capability {key} provider_path relative",
+                  not os.path.isabs(pp) and ".." not in parts, pp)
+            expected = f"external-capabilities/providers/{provider}/README.md" if isinstance(provider, str) else None
+            if expected:
+                check(f"capability {key} provider_path location", pp == expected,
+                      f"{pp!r} (expected {expected!r})")
+            check(f"capability {key} provider_path exists",
+                  os.path.isfile(os.path.join(ROOT, pp)), pp)
+    return collected
+
+
+def discover_skill_packages():
+    """Find skill packages on disk that contain SKILL.md."""
+    found = []
+    shared_base = os.path.join(ROOT, "skills/shared")
+    if os.path.isdir(shared_base):
+        for name in sorted(os.listdir(shared_base)):
+            if name.startswith("."):
+                continue
+            if os.path.isfile(os.path.join(shared_base, name, "SKILL.md")):
+                found.append(f"skills/shared/{name}")
+    proj_base = os.path.join(ROOT, "skills/projects")
+    if os.path.isdir(proj_base):
+        for proj in sorted(os.listdir(proj_base)):
+            if proj.startswith("."):
+                continue
+            proj_dir = os.path.join(proj_base, proj)
+            if not os.path.isdir(proj_dir):
+                continue
+            for name in sorted(os.listdir(proj_dir)):
+                if name.startswith("."):
+                    continue
+                if os.path.isfile(os.path.join(proj_dir, name, "SKILL.md")):
+                    found.append(f"skills/projects/{proj}/{name}")
+    return found
 
 
 def main() -> int:
-    # 1. Top-level registry parses.
-    top = load_yaml("registry.yaml")
-    if top is None:
+    # ---- 1. Top-level registry ----
+    top, ok = load_yaml("registry.yaml")
+    if not ok:
         return report(1)
     check("top-level registry schema_version", top.get("schema_version") == 1,
           f"got {top.get('schema_version')!r}")
-    check("top-level platform name", top.get("platform", {}).get("name") == "personal-ai-capability-platform",
+    check("top-level platform name", top.get("platform", {}).get("name") == PRODUCT_NAME,
           repr(top.get("platform", {}).get("name")))
-    check("top-level platform owner", top.get("platform", {}).get("owner") == "LyraWang6688",
+    check("top-level platform owner", top.get("platform", {}).get("owner") == PLATFORM_OWNER,
           repr(top.get("platform", {}).get("owner")))
 
-    # 2. Referenced registries exist and 3. are not duplicated.
-    refs = (top.get("registries") or {})
-    expected_refs = {"skills", "external_capabilities", "dependencies"}
-    check("top-level registry routes all domains", set(refs.keys()) == expected_refs,
+    # ---- 2. Router values: present, non-empty string, exists; load through router ----
+    refs = top.get("registries")
+    expected_domains = ("skills", "external_capabilities", "dependencies")
+    if not isinstance(refs, dict):
+        check("top-level registries is a mapping", False, type(refs).__name__)
+        return report(1)
+    check("top-level registry routes all domains", set(refs.keys()) == set(expected_domains),
           f"routes: {sorted(refs.keys())}")
-    ref_paths = [p for p in refs.values() if isinstance(p, str)]
-    check("registry paths not duplicated", len(ref_paths) == len(set(ref_paths)),
+    for domain in expected_domains:
+        val = refs.get(domain)
+        check(f"route value present: {domain}", val is not None, "missing route value")
+        check(f"route value is non-empty string: {domain}",
+              isinstance(val, str) and len(val) > 0, repr(val))
+    paths = [refs[d] for d in expected_domains if isinstance(refs.get(d), str)]
+    check("registry paths not duplicated", len(paths) == len(set(paths)),
           "duplicate registry path in top-level registries")
-    for domain, rel in refs.items():
-        if isinstance(rel, str):
+    for domain in expected_domains:
+        rel = refs.get(domain)
+        if isinstance(rel, str) and rel:
             check(f"referenced registry exists: {rel}", os.path.exists(os.path.join(ROOT, rel)),
                   "file not found")
 
-    # 4. Skill lifecycle status legal.
-    skills_reg = load_yaml("skills/registry.yaml")
-    if skills_reg is not None:
+    # Load domain registries THROUGH the router values (router = source of truth).
+    skills_reg, skills_ok = load_yaml(refs["skills"]) if isinstance(refs.get("skills"), str) and refs["skills"] else (None, False)
+    caps_reg, caps_ok = load_yaml(refs["external_capabilities"]) if isinstance(refs.get("external_capabilities"), str) and refs["external_capabilities"] else (None, False)
+    deps_reg, deps_ok = load_yaml(refs["dependencies"]) if isinstance(refs.get("dependencies"), str) and refs["dependencies"] else (None, False)
+
+    # ---- 3. Domain registry headers ----
+    if skills_ok:
+        check("skills registry schema_version", skills_reg.get("schema_version") == 1,
+              f"got {skills_reg.get('schema_version')!r}")
+        check("skills registry domain", skills_reg.get("domain") == "skills",
+              repr(skills_reg.get("domain")))
+    if caps_ok:
+        check("capability registry schema_version", caps_reg.get("schema_version") == 1,
+              f"got {caps_reg.get('schema_version')!r}")
+        check("capability registry domain", caps_reg.get("domain") == "external_capabilities",
+              repr(caps_reg.get("domain")))
+    if deps_ok:
+        check("dependency registry schema_version", deps_reg.get("schema_version") == 1,
+              f"got {deps_reg.get('schema_version')!r}")
+        check("dependency registry dependencies is a list",
+              isinstance(deps_reg.get("dependencies"), list),
+              type(deps_reg.get("dependencies")).__name__)
+
+    # ---- 4/5. Skill registry schema + paths ----
+    shared_entries = validate_skill_entries(skills_reg, "shared") if skills_ok else []
+    proj_entries = validate_skill_entries(skills_reg, "projects") if skills_ok else []
+    if skills_ok:
         allowed = set(skills_reg.get("allowed_statuses") or [])
         check("skills registry keeps 5 lifecycle statuses", allowed == ALLOWED_SKILL_STATUSES,
               f"allowed={sorted(allowed)}")
-        for name, entry in walk_map_entries(skills_reg, "projects"):
-            status = entry.get("status")
-            check(f"skill status legal: {name}", status in ALLOWED_SKILL_STATUSES, f"status={status!r}")
-        for name, entry in walk_map_entries(skills_reg, "shared"):
-            status = entry.get("status")
-            check(f"skill status legal: {name}", status in ALLOWED_SKILL_STATUSES, f"status={status!r}")
+    for key, entry in shared_entries:
+        validate_skill_path(key, entry, "shared")
+    for key, entry in proj_entries:
+        validate_skill_path(key, entry, "projects")
 
-    # 5. External capability status / type legal.
-    caps_reg = load_yaml("external-capabilities/registry.yaml")
-    if caps_reg is not None:
+    # ---- 6. Registry <-> filesystem symmetry ----
+    registered_paths = set()
+    for key, entry in shared_entries + proj_entries:
+        path = entry.get("path")
+        if isinstance(path, str) and path:
+            registered_paths.add(path.rstrip("/"))
+    for rel in discover_skill_packages():
+        check(f"filesystem skill is registered: {rel}", rel in registered_paths,
+              "package directory exists but has no registry entry")
+
+    # ---- 7. Duplicate skill identity ----
+    shared_names = {key for key, _ in shared_entries}
+    proj_names = {key for key, _ in proj_entries}
+    duplicates = shared_names & proj_names
+    check("no duplicate skill identity across projects/shared", not duplicates,
+          f"duplicates: {sorted(duplicates)}")
+
+    # ---- 8/9. Capability schema + provider naming ----
+    cap_entries = validate_capability_entries(caps_reg) if caps_ok else []
+    if caps_ok:
         allowed_types = set(caps_reg.get("allowed_types") or [])
         allowed_statuses = set(caps_reg.get("allowed_statuses") or [])
         check("capability registry supports 6 types", allowed_types == ALLOWED_CAPABILITY_TYPES,
               f"types={sorted(allowed_types)}")
         check("capability registry keeps 4 statuses", allowed_statuses == ALLOWED_CAPABILITY_STATUSES,
               f"statuses={sorted(allowed_statuses)}")
-        for name, entry in walk_map_entries(caps_reg, "capabilities"):
-            status = entry.get("status")
-            check(f"capability status legal: {name}", status in ALLOWED_CAPABILITY_STATUSES,
-                  f"status={status!r}")
-            ctype = entry.get("type")
-            if ctype is not None:
-                check(f"capability type legal: {name}", ctype in ALLOWED_CAPABILITY_TYPES,
-                      f"type={ctype!r}")
+    providers_dir = os.path.join(ROOT, "external-capabilities/providers")
+    if os.path.isdir(providers_dir):
+        for name in sorted(os.listdir(providers_dir)):
+            if name.startswith("."):
+                continue
+            check(f"provider directory kebab-case: {name}", bool(KEBAB_RE.match(name)), name)
 
-    # 6. Registered paths exist on disk.
-    for name, entry in walk_map_entries(skills_reg if skills_reg is not None else {}, "projects"):
-        path = entry.get("path")
-        if path:
-            check(f"registered skill path exists: {name}", os.path.exists(os.path.join(ROOT, path)),
-                  f"path={path!r}")
-    for name, entry in walk_map_entries(skills_reg if skills_reg is not None else {}, "shared"):
-        path = entry.get("path")
-        if path:
-            check(f"registered skill path exists: {name}", os.path.exists(os.path.join(ROOT, path)),
-                  f"path={path!r}")
-    for name, entry in walk_map_entries(caps_reg if caps_reg is not None else {}, "capabilities"):
-        path = entry.get("provider_path")
-        if path:
-            check(f"registered provider path exists: {name}", os.path.exists(os.path.join(ROOT, path)),
-                  f"path={path!r}")
-
-    # 7. Basic naming compliance (kebab-case for registered identifiers and directories).
-    for name, _ in walk_map_entries(skills_reg if skills_reg is not None else {}, "projects"):
-        check(f"naming kebab-case: {name}", bool(KEBAB_RE.match(name)))
-    for name, _ in walk_map_entries(skills_reg if skills_reg is not None else {}, "shared"):
-        check(f"naming kebab-case: {name}", bool(KEBAB_RE.match(name)))
-    for name, _ in walk_map_entries(caps_reg if caps_reg is not None else {}, "capabilities"):
-        check(f"naming kebab-case: {name}", bool(KEBAB_RE.match(name)))
-    for base in ("skills/projects", "skills/shared"):
-        base_path = os.path.join(ROOT, base)
-        if os.path.isdir(base_path):
-            for entry in os.listdir(base_path):
-                if entry.startswith("."):
+    # ---- 10/11. Dependency registry parsing + foreign keys ----
+    skill_ids = shared_names | proj_names
+    capability_ids = {key for key, _ in cap_entries}
+    if deps_ok:
+        deps = deps_reg.get("dependencies")
+        if isinstance(deps, list):
+            for i, dep in enumerate(deps):
+                if not isinstance(dep, dict):
+                    check(f"dependency {i} is a mapping", False, type(dep).__name__)
                     continue
-                check(f"naming kebab-case: {base}/{entry}", bool(KEBAB_RE.match(entry)))
+                skill = dep.get("skill")
+                check(f"dependency {i} has skill", isinstance(skill, str) and skill,
+                      f"skill={skill!r}")
+                if isinstance(skill, str) and skill:
+                    check(f"dependency {i} skill exists in skills registry",
+                          skill in skill_ids, f"skill={skill!r}")
+                requires = dep.get("requires")
+                check(f"dependency {i} requires is a list", isinstance(requires, list),
+                      type(requires).__name__)
+                if isinstance(requires, list):
+                    for j, req in enumerate(requires):
+                        if not isinstance(req, dict):
+                            check(f"dependency {i}.requires[{j}] is a mapping", False,
+                                  type(req).__name__)
+                            continue
+                        cap = req.get("capability")
+                        check(f"dependency {i}.requires[{j}] has capability",
+                              isinstance(cap, str) and cap, f"capability={cap!r}")
+                        if isinstance(cap, str) and cap:
+                            check(f"dependency {i}.requires[{j}] capability exists in capability registry",
+                                  cap in capability_ids, f"capability={cap!r}")
+                        required = req.get("required")
+                        check(f"dependency {i}.requires[{j}] required is a boolean",
+                              isinstance(required, bool), repr(required))
 
-    # 8. Required policy files exist.
+    # ---- Required policy / asset files ----
     for rel in REQUIRED_POLICY_FILES:
-        check(f"required policy exists: {rel}", os.path.exists(os.path.join(ROOT, rel)))
+        check(f"required asset exists: {rel}", os.path.exists(os.path.join(ROOT, rel)))
 
-    # 9. Lightweight secret scan.
+    # ---- 12. Lightweight secret scan (reference metadata exempt) ----
     for rel in ("registry.yaml", "skills/registry.yaml",
                 "external-capabilities/registry.yaml", "dependencies/capability-map.yaml"):
         scan_for_secrets(rel)
