@@ -1,0 +1,34 @@
+# External Capability Domain Registry
+# Source of Truth for: external capability identity / provider / type / availability / auth model / permission model / capabilities
+schema_version: 1
+
+domain: external_capabilities
+description: External capability identity, provider, type, availability, auth model, permission model, capabilities.
+
+allowed_types:
+  - plugin
+  - mcp
+  - connector
+  - cli
+  - external-api
+  - integration
+
+allowed_statuses:
+  - available
+  - limited
+  - disabled
+  - unknown
+
+capabilities: {}
+
+# A capability record supports these fields (when known):
+#   name:          capability identifier (lowercase kebab-case)
+#   provider:      provider identifier
+#   status:        one of allowed_statuses
+#   auth:          authentication model — metadata only, NEVER secret values
+#   capabilities:  what the capability can do
+#   permissions:   required / verified permissions only
+#   provider_path: relative path to the provider record under providers/
+#   notes:         free-form notes
+#
+# No fictional providers or capabilities are registered in this skeleton.

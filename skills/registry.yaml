@@ -1,0 +1,24 @@
+# Skill Domain Registry
+# Source of Truth for: Skill identity / path / lifecycle / version
+schema_version: 1
+
+domain: skills
+description: Skill identity, path, lifecycle status, and version.
+
+projects: {}
+
+shared: {}
+
+allowed_statuses:
+  - draft
+  - testing
+  - active
+  - deprecated
+  - archived
+
+# Required fields per skill entry (when registered):
+#   name:      skill identifier (lowercase kebab-case)
+#   path:      relative path to the skill directory
+#   status:    one of allowed_statuses
+#   version:   semantic X.Y.Z (see VERSIONING.md)
+#   updated:   last update date (YYYY-MM-DD)
