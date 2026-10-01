@@ -51,7 +51,7 @@ Must define and test:
 - Negative Trigger Cases
 
 Platform v0.1 initial acceptance thresholds
-(this is the AI Capability Platform's own initial threshold,
+(this is the AI Capability Store's own initial threshold,
 not a vendor-mandated standard):
 
 - Positive trigger rate >= 90%
