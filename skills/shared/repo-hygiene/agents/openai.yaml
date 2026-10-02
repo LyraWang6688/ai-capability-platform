@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repository Hygiene"
+  short_description: "Audit, classify, migrate, and safely clean repositories"
+  default_prompt: "Use $repo-hygiene to audit this repository, classify cleanup candidates, and prepare a human-approved safe cleanup plan."

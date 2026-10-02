@@ -7,7 +7,13 @@ description: Skill identity, path, lifecycle status, and version.
 
 projects: {}
 
-shared: {}
+shared:
+  repo-hygiene:
+    name: repo-hygiene
+    path: skills/shared/repo-hygiene
+    status: testing
+    version: 0.1.0
+    updated: "2026-10-01"
 
 allowed_statuses:
   - draft
