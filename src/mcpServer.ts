@@ -30,7 +30,7 @@ const { inspectArticleBundle, publishArticleBundle, summarizeBundle } = await im
 const { createWechatApi, readCredentialsFromEnv } = await import("./wechatApi.js");
 
 const server = new McpServer({
-  name: "wechat-draft-capability",
+  name: "wechat-draft-mcp",
   version: "0.1.0"
 });
 
