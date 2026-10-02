@@ -1,0 +1,27 @@
+{
+  "name": "wechat-draft-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "本地 MCP 服务：把磁盘上的文章创建成微信公众号草稿。只创建草稿，不发布。",
+  "bin": {
+    "wechat-draft-mcp": "./dist/mcpServer.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "mcp": "node dist/mcpServer.js",
+    "cli": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
