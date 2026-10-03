@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Typecheck, build, smoke, and security checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify security boundaries
+        run: npm run security-smoke
+
+      - name: Verify Base block discovery offline
+        run: node scripts/base-block-list-smoke.mjs
+
+      - name: Start local MCP server and run smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          server_log="${RUNNER_TEMP}/feishu-cli-mcp-server.log"
+          MCP_HOST=127.0.0.1 \
+          MCP_PORT=3101 \
+          MCP_ALLOW_REMOTE=false \
+          node dist/server.js >"${server_log}" 2>&1 &
+          server_pid=$!
+
+          cleanup() {
+            kill "${server_pid}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          server_ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:3101/health >/dev/null; then
+              server_ready=true
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "${server_ready}" != "true" ]]; then
+            echo "Local MCP server did not become ready."
+            cat "${server_log}"
+            exit 1
+          fi
+
+          MCP_URL=http://127.0.0.1:3101/mcp npm run smoke
