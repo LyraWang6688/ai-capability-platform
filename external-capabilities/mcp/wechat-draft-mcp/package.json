@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "本地 MCP 服务：把磁盘上的文章创建成微信公众号草稿。只创建草稿，不发布。",
+  "license": "MIT",
   "bin": {
     "wechat-draft-mcp": "./dist/mcpServer.js"
   },
