@@ -16,7 +16,14 @@ domain: skills
 description: Skill identity, path, lifecycle status, version, and placement scope.
 
 # One flat mapping keyed by Skill identifier (map key == name). No sections.
-skills: {}
+skills:
+  repo-hygiene:
+    name: repo-hygiene
+    path: skills/repo-hygiene
+    scope: shared
+    status: testing
+    version: 0.1.0
+    updated: "2026-10-03"
 
 allowed_statuses:
   - draft
