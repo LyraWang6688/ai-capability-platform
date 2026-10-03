@@ -23,22 +23,32 @@ capabilities: {}
 
 # External Capability Registry Schema (v1)
 # capabilities is a mapping keyed by capability identifier (map key == name).
+#
+# SCOPE POLICY: this Store accepts STORE-MANAGED capabilities ONLY — i.e. code
+# the Store itself hosts and maintains. Third-party capabilities whose code
+# lives elsewhere (pure external connectors / APIs) are NOT registered here.
+# If that policy ever changes, the schema must be extended with an explicit
+# hosting declaration rather than by inferring intent from a missing field.
+#
 # Required fields per entry:
 #   name           == map key, lowercase kebab-case
 #   provider       provider identifier (lowercase kebab-case)
 #   type           one of allowed_types
 #   status         one of allowed_statuses
 #   provider_path  external-capabilities/providers/<provider>/README.md (must exist)
-# Optional (when known):
 #   version          semantic X.Y.Z — the Store-recommended version (see VERSIONING.md)
-#   implementation_path  relative repo path to a Store-managed implementation,
+#   implementation_path  relative repo path to the Store-managed implementation,
 #                        e.g. external-capabilities/mcp/<capability-name>/
-#                        CONDITIONAL CONTRACT: when implementation_path is present
-#                        (Store-managed / Store-owned code), the path must exist,
-#                        must live under external-capabilities/, and the entry MUST
-#                        declare a valid semantic `version`. Pure external
-#                        capabilities (third-party connectors / APIs with no
-#                        Store-hosted code) simply omit implementation_path.
+#                        REQUIRED: the path must exist, must be relative with no
+#                        ../, and must live under external-capabilities/.
+#
+# Why implementation_path and version are required rather than optional: while
+# they were optional, an entry that simply omitted implementation_path skipped
+# every implementation check and still reported a clean run, pointing at no code
+# at all — a silent failure. Requiring them removes the ambiguity; a missing
+# field is now an error instead of a different-but-valid shape.
+#
+# Optional (when known):
 #   auth           authentication model — metadata only, NEVER secret values
 #   capabilities   what the capability can do
 #   permissions    required / verified permissions only
