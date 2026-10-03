@@ -2,3 +2,8 @@
 # this one line covers every directory. Without it, `git add -A` silently
 # commits .DS_Store into the Store.
 .DS_Store
+
+# The validator's Python dependencies. store-publish's "环境准备" step creates
+# this venv inside the checkout so it survives across sessions (unlike /tmp),
+# and it must never be committed.
+.venv/
