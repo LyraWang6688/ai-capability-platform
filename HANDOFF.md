@@ -205,24 +205,59 @@ npm run test:only # 跳过编译，直接重跑
 
 ---
 
-## 10. 后续：进 AI Capability Store（**先不急**）
+## 10. 进 AI Capability Store（**已完成** —— 2026-10-03）
 
-用户有一个能力仓库 `~/Documents/workplace/ai-capability-store`（`LyraWang6688/ai-capability-store`），本 MCP 最终要作为能力资产入库。
+本 MCP 已作为能力资产入库：Store 的 **PR #12**，tag **`wechat-draft-mcp-v0.1.0`**。
 
-**但用户明确决定：先独立跑，等 Store 契约稳定了再入。** Store 才开发两天。
+### 实际用的契约（2026-10-03 版）
 
-入库时要遵守的契约（已读过）：
+| 项 | 实际值 |
+|---|---|
+| 实现位置 | `external-capabilities/mcp/wechat-draft-mcp/` |
+| Provider 文档 | `external-capabilities/providers/wechat/README.md` |
+| 注册表 | `external-capabilities/registry.yaml`（`status: limited`） |
+| 导入方式 | `git subtree` —— 保留完整源历史（含 106 项测试） |
 
-- 实现放 `external-capabilities/mcp/wechat-draft/`
-- Provider 文档放 `external-capabilities/providers/<provider>/README.md`
-- Skill 放 `skills/shared/wechat-draft/`（**Skill 与 External Capability 是平级域，不能塞一起**）
-- 注册进 `external-capabilities/registry.yaml`（有 `implementation_path` 就**必须**声明 `version: X.Y.Z`）
+### ⚠️ 以下是"旧契约"，别再照抄
+
+本节早期版本写的就是它们，**已经全部失效**：
+
+| 旧的 | 现在的 |
+|---|---|
+| ❌ `external-capabilities/mcp/wechat-draft/` | ✅ 带 `-mcp` 后缀；目录名 / 注册表 key / `name` 三者必须一致 |
+| ❌ `skills/shared/wechat-draft/`（嵌套） | ✅ Store 已改为**平铺** `skills/<name>/`；嵌套布局客户端根本加载不到（Agent Plugins v1 §7.1） |
+| ❌ "有 `implementation_path` 就**必须**声明 `version`" | ✅ `implementation_path` 和 `version` 现在都是**必填**（本 Store 只收自研能力） |
+| ❌ "先不急，等 Store 契约稳定了再入" | ✅ 已入库 |
+
+### 🔴 仍未解决：许可证冲突
+
+```
+Store 根 LICENSE      =  MIT              （允许复制、分发、修改）
+本 MCP 的 LICENSE     =  PROPRIETARY AND CONFIDENTIAL
+                         All Rights Reserved
+                         （禁止复制、分发、修改、再许可）
+        ↓
+同一个仓库里，两个 LICENSE 说相反的话
+```
+
+而且 **Store 是公开仓库** —— 这份标注 `CONFIDENTIAL` 的源码，
+目前**任何人都能匿名下载**，"机密"这个声明事实上已不成立。
+
+**版权人是同一个（Lyra Wang）**，所以这不是第三方权利冲突；
+但它需要本人做一个决定：
+
+- 把本 MCP 的许可证改成 MIT（与 Store 一致），**或**
+- 让它不进公开 Store（Store 转私有 / 把它移出）
+
+**未定。** （`feishu-cli-mcp-server` 是 MIT，没有这个问题。）
+
+### 其他仍然有效的契约
+
 - 依赖声明进 `dependencies/capability-map.yaml`
 - **绝不能带任何密钥**（只允许认证元数据）
 - 必须过 `scripts/validate_store.py`
 - 走 feature branch → PR，不直接推 main
 - commit 规范：`feat(capability): add <name>`
-- Store 是 **MIT**；本项目是**专有声明**，未继承 MIT —— 入库前要确认许可证是否冲突
 
 ---
 
