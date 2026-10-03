@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-test/
+# 连通性验证用的测试文章包（含图片与元数据，不进版本库）
+smoke-article/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+# 调研过程中的原始抓取数据（体积大，不进版本库；结论已沉淀到 docs/）
+.research/
+.xhs-research/
