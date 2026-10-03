@@ -229,27 +229,32 @@ npm run test:only # 跳过编译，直接重跑
 | ❌ "有 `implementation_path` 就**必须**声明 `version`" | ✅ `implementation_path` 和 `version` 现在都是**必填**（本 Store 只收自研能力） |
 | ❌ "先不急，等 Store 契约稳定了再入" | ✅ 已入库 |
 
-### 🔴 仍未解决：许可证冲突
+### ✅ 许可证冲突：已解决（2026-10-03）
+
+这里最初记录的是：
 
 ```
 Store 根 LICENSE      =  MIT              （允许复制、分发、修改）
 本 MCP 的 LICENSE     =  PROPRIETARY AND CONFIDENTIAL
-                         All Rights Reserved
-                         （禁止复制、分发、修改、再许可）
+                         All Rights Reserved（禁止复制、分发、修改、再许可）
         ↓
 同一个仓库里，两个 LICENSE 说相反的话
 ```
 
-而且 **Store 是公开仓库** —— 这份标注 `CONFIDENTIAL` 的源码，
-目前**任何人都能匿名下载**，"机密"这个声明事实上已不成立。
+而且 **Store 是公开仓库** —— 那份标注 `CONFIDENTIAL` 的源码，
+任何人都能匿名下载，"机密"这个声明事实上已不成立。
 
-**版权人是同一个（Lyra Wang）**，所以这不是第三方权利冲突；
-但它需要本人做一个决定：
+**已按本人决定解决：本 MCP 的许可证改为 MIT，与 Store 一致。**
 
-- 把本 MCP 的许可证改成 MIT（与 Store 一致），**或**
-- 让它不进公开 Store（Store 转私有 / 把它移出）
+- `LICENSE` 换成 MIT 全文
+- `package.json` 增加 `"license": "MIT"`
 
-**未定。** （`feishu-cli-mcp-server` 是 MIT，没有这个问题。）
+**为什么选这个方向**：本 MCP 的目标就是进公开 Store、跨 Agent 分发
+（要能被 `npx skills add` 装上）。这要求仓库公开 ——
+而公开仓库里放"机密"文件是自相矛盾的。版权人是同一个人，
+所以改许可证不涉及第三方权利。
+
+（`feishu-cli-mcp-server` 本来就是 MIT，无此问题。）
 
 ### 其他仍然有效的契约
 
