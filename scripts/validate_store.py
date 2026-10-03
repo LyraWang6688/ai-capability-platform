@@ -98,6 +98,10 @@ STORE_OWNER = "LyraWang6688"
 STORE_SCHEMA_VERSION = 2
 
 ALLOWED_SKILL_STATUSES = {"draft", "testing", "active", "deprecated", "archived"}
+# Placement classification lives on the record, not in the directory layout —
+# the on-disk layout is flat (`skills/<name>/`) because Agent Plugins v1 requires
+# `skills/` immediate children and forbids recursive discovery.
+ALLOWED_SKILL_SCOPES = {"shared", "project"}
 ALLOWED_CAPABILITY_TYPES = {"plugin", "mcp", "connector", "cli", "external-api", "integration"}
 ALLOWED_CAPABILITY_STATUSES = {"available", "limited", "disabled", "unknown"}
 
@@ -251,29 +255,32 @@ def scan_for_secrets(rel_path: str) -> None:
     check(f"secret scan: {rel_path}", not hits, "; ".join(hits) if hits else "clean")
 
 
-def validate_skill_entries(reg: dict, section: str):
-    """Validate the required-field schema of every skill record in a section.
+def validate_skill_entries(reg: dict):
+    """Validate the required-field schema of every skill record.
+
+    One flat `skills:` mapping. Placement is no longer encoded by a registry
+    section (`shared` / `projects`); it is a record field (`scope` / `project`),
+    because the directory layout is flat and the registry is the single source
+    of truth for classification.
+
     Returns list of (key, entry)."""
-    entries_section = reg.get(section)
+    entries_section = reg.get("skills")
     if entries_section is None:
-        check(f"skill registry has {section} section", False, "missing section")
+        check("skill registry has skills section", False, "missing section")
         return []
     if not isinstance(entries_section, dict):
-        check(f"skill registry {section} is a mapping", False, type(entries_section).__name__)
+        check("skill registry skills is a mapping", False, type(entries_section).__name__)
         return []
     collected = []
     for key, entry in entries_section.items():
         if not isinstance(entry, dict):
-            check(f"skill record is a mapping: {section}.{key}", False, type(entry).__name__)
+            check(f"skill record is a mapping: {key}", False, type(entry).__name__)
             continue
         collected.append((key, entry))
-        required_fields = ["name", "path", "status", "version", "updated"]
-        if section == "projects":
-            required_fields.append("project")
-        for field in required_fields:
+        for field in ("name", "path", "status", "version", "updated"):
             val = entry.get(field)
             present = val is not None
-            check(f"skill {section}.{key} has required field: {field}", present,
+            check(f"skill {key} has required field: {field}", present,
                   f"value={val!r}")
             if present:
                 # Required field = presence + type + semantic format.
@@ -283,81 +290,96 @@ def validate_skill_entries(reg: dict, section: str):
                     ok_type = isinstance(val, str) or isinstance(val, datetime.date)
                 else:
                     ok_type = isinstance(val, str)
-                check(f"skill {section}.{key} required field is non-empty string: {field}",
+                check(f"skill {key} required field is non-empty string: {field}",
                       ok_type and (isinstance(val, datetime.date) or len(val) > 0),
                       f"value={val!r} type={type(val).__name__}")
-        check(f"skill {section}.{key} map key == name", key == entry.get("name"),
+        check(f"skill {key} map key == name", key == entry.get("name"),
               f"key={key!r} name={entry.get('name')!r}")
-        check(f"skill {section}.{key} identifier kebab-case", bool(KEBAB_RE.match(key)),
+        check(f"skill {key} identifier kebab-case", bool(KEBAB_RE.match(key)),
               f"key={key!r}")
         name = entry.get("name")
         if isinstance(name, str) and name:
-            check(f"skill {section}.{key} name kebab-case", bool(KEBAB_RE.match(name)), name)
+            check(f"skill {key} name kebab-case", bool(KEBAB_RE.match(name)), name)
+        # Closed field set: classification is a record field, not a section.
+        unknown = set(entry.keys()) - {
+            "name", "path", "scope", "project", "status", "version", "updated", "notes",
+        }
+        check(f"skill {key} has only allowed fields", not unknown,
+              f"unknown fields: {sorted(unknown)}")
+        scope = entry.get("scope")
+        if scope is not None:
+            check(f"skill {key} scope legal", scope in ALLOWED_SKILL_SCOPES,
+                  f"scope={scope!r} (allowed: {sorted(ALLOWED_SKILL_SCOPES)})")
         project = entry.get("project")
         if isinstance(project, str) and project:
-            check(f"skill {section}.{key} project kebab-case", bool(KEBAB_RE.match(project)),
-                  project)
+            check(f"skill {key} project kebab-case", bool(KEBAB_RE.match(project)), project)
+            # `project` describes a project-scoped skill; carrying it without
+            # scope: project would recreate the second source of truth.
+            check(f"skill {key} project requires scope: project",
+                  scope == "project", f"scope={scope!r} project={project!r}")
+        if scope == "project":
+            check(f"skill {key} scope project requires project field",
+                  isinstance(project, str) and bool(project), f"project={project!r}")
         status = entry.get("status")
         if status is not None:
-            check(f"skill {section}.{key} status legal", status in ALLOWED_SKILL_STATUSES,
+            check(f"skill {key} status legal", status in ALLOWED_SKILL_STATUSES,
                   f"status={status!r}")
         version = entry.get("version")
         if isinstance(version, str):
-            check(f"skill {section}.{key} version X.Y.Z", bool(VERSION_RE.match(version)), version)
+            check(f"skill {key} version X.Y.Z", bool(VERSION_RE.match(version)), version)
             if VERSION_RE.match(version):
                 # VERSIONING.md: 0.x is experimental/draft/testing, 1.x+ is
                 # required for active; an experimental version must not be
                 # marked active.
                 major = int(version.split(".")[0])
-                check(f"skill {section}.{key} active requires major >= 1",
+                check(f"skill {key} active requires major >= 1",
                       status != "active" or major >= 1,
                       f"status={status!r} version={version}")
         updated = entry.get("updated")
         if isinstance(updated, str):
             shape_ok = bool(DATE_RE.match(updated))
-            check(f"skill {section}.{key} updated YYYY-MM-DD", shape_ok, updated)
+            check(f"skill {key} updated YYYY-MM-DD", shape_ok, updated)
             if shape_ok:
                 try:
                     datetime.date.fromisoformat(updated)
                     real_ok = True
                 except ValueError:
                     real_ok = False
-                check(f"skill {section}.{key} updated is a real calendar date", real_ok,
-                      updated)
+                check(f"skill {key} updated is a real calendar date", real_ok, updated)
         elif isinstance(updated, datetime.date):
-            check(f"skill {section}.{key} updated YYYY-MM-DD",
+            check(f"skill {key} updated YYYY-MM-DD",
                   bool(DATE_RE.match(updated.isoformat())), updated.isoformat())
     return collected
 
 
-def validate_skill_path(key: str, entry: dict, section: str) -> None:
-    """Path must be a relative, contained directory with required package files."""
+def validate_skill_path(key: str, entry: dict) -> None:
+    """Path must be a flat, relative, contained directory with required files.
+
+    Flat layout only: `skills/<skill-name>/` (exactly 2 components).
+
+    Why flat is enforced here: Agent Plugins v1 §7.1 fixes skill discovery at
+    `skills/` and requires each *immediate child directory* containing SKILL.md
+    to be one skill, and states clients MUST NOT recurse into deeper
+    descendants. A nested layout such as `skills/shared/<name>/` would therefore
+    be invisible to conformant clients, so the validator refuses it rather than
+    letting a skill pass Store validation and silently fail to install."""
     path = entry.get("path")
     if not isinstance(path, str) or not path:
         return
-    check(f"skill {section}.{key} path is relative", not os.path.isabs(path), path)
+    check(f"skill {key} path is relative", not os.path.isabs(path), path)
     parts = path.split("/")
-    check(f"skill {section}.{key} path has no '..'", ".." not in parts, path)
+    check(f"skill {key} path has no '..'", ".." not in parts, path)
     abs_path = os.path.join(ROOT, path)
-    check(f"skill {section}.{key} path is a directory", os.path.isdir(abs_path), path)
+    check(f"skill {key} path is a directory", os.path.isdir(abs_path), path)
     leaf = path.rstrip("/").split("/")[-1]
-    check(f"skill {section}.{key} path leaf == skill name", leaf == key, f"leaf={leaf!r} key={key!r}")
-    if section == "shared":
-        # Exact layout: skills/shared/<skill-name>/ (3 components), no nesting.
-        check(f"skill {section}.{key} path under skills/shared/",
-              path.startswith("skills/shared/"), path)
-        check(f"skill {section}.{key} path has exactly 3 components", len(parts) == 3, path)
-    else:
-        project = entry.get("project")
-        prefix = f"skills/projects/{project}/" if isinstance(project, str) else None
-        check(f"skill {section}.{key} path under skills/projects/<project>/",
-              bool(prefix) and path.startswith(prefix), f"path={path!r} project={project!r}")
-        # Exact layout: skills/projects/<project>/<skill-name>/ (4 components).
-        check(f"skill {section}.{key} path has exactly 4 components", len(parts) == 4, path)
+    check(f"skill {key} path leaf == skill name", leaf == key, f"leaf={leaf!r} key={key!r}")
+    # Exact flat layout: skills/<skill-name>/ — no category level, no nesting.
+    check(f"skill {key} path is exactly skills/<name> (flat layout)",
+          len(parts) == 2 and parts[0] == "skills", path)
     if os.path.isdir(abs_path):
-        check(f"skill {section}.{key} package has SKILL.md",
+        check(f"skill {key} package has SKILL.md",
               os.path.isfile(os.path.join(abs_path, "SKILL.md")), path)
-        check(f"skill {section}.{key} package has agents/openai.yaml",
+        check(f"skill {key} package has agents/openai.yaml",
               os.path.isfile(os.path.join(abs_path, "agents", "openai.yaml")), path)
 
 
@@ -440,28 +462,21 @@ def validate_capability_entries(reg: dict):
 
 
 def discover_skill_packages():
-    """Find skill packages on disk that contain SKILL.md."""
+    """Find skill packages on disk that contain SKILL.md.
+
+    Flat layout only: `skills/<name>/`. Deliberately NOT recursive — Agent
+    Plugins v1 §7.1 forbids clients from searching deeper descendants, so a
+    nested package is not a discoverable skill and must not be treated as one
+    here either (otherwise the validator would certify an asset that conformant
+    clients cannot see)."""
     found = []
-    shared_base = os.path.join(ROOT, "skills/shared")
-    if os.path.isdir(shared_base):
-        for name in sorted(os.listdir(shared_base)):
+    base = os.path.join(ROOT, "skills")
+    if os.path.isdir(base):
+        for name in sorted(os.listdir(base)):
             if name.startswith("."):
                 continue
-            if os.path.isfile(os.path.join(shared_base, name, "SKILL.md")):
-                found.append(f"skills/shared/{name}")
-    proj_base = os.path.join(ROOT, "skills/projects")
-    if os.path.isdir(proj_base):
-        for proj in sorted(os.listdir(proj_base)):
-            if proj.startswith("."):
-                continue
-            proj_dir = os.path.join(proj_base, proj)
-            if not os.path.isdir(proj_dir):
-                continue
-            for name in sorted(os.listdir(proj_dir)):
-                if name.startswith("."):
-                    continue
-                if os.path.isfile(os.path.join(proj_dir, name, "SKILL.md")):
-                    found.append(f"skills/projects/{proj}/{name}")
+            if os.path.isfile(os.path.join(base, name, "SKILL.md")):
+                found.append(f"skills/{name}")
     return found
 
 
@@ -535,8 +550,8 @@ def main() -> int:
 
     # ---- 3. Domain registry headers ----
     if skills_ok:
-        check("skills registry schema_version", skills_reg.get("schema_version") == 1,
-              f"got {skills_reg.get('schema_version')!r}")
+        check("skills registry schema_version", skills_reg.get("schema_version") == 2,
+              f"got {skills_reg.get('schema_version')!r} (expected 2: flat skills map)")
         check("skills registry domain", skills_reg.get("domain") == "skills",
               repr(skills_reg.get("domain")))
     if caps_ok:
@@ -552,20 +567,17 @@ def main() -> int:
               type(deps_reg.get("dependencies")).__name__)
 
     # ---- 4/5. Skill registry schema + paths ----
-    shared_entries = validate_skill_entries(skills_reg, "shared") if skills_ok else []
-    proj_entries = validate_skill_entries(skills_reg, "projects") if skills_ok else []
+    skill_entries = validate_skill_entries(skills_reg) if skills_ok else []
     if skills_ok:
         allowed = set(skills_reg.get("allowed_statuses") or [])
         check("skills registry keeps 5 lifecycle statuses", allowed == ALLOWED_SKILL_STATUSES,
               f"allowed={sorted(allowed)}")
-    for key, entry in shared_entries:
-        validate_skill_path(key, entry, "shared")
-    for key, entry in proj_entries:
-        validate_skill_path(key, entry, "projects")
+    for key, entry in skill_entries:
+        validate_skill_path(key, entry)
 
     # ---- 6. Registry <-> filesystem symmetry ----
     registered_paths = set()
-    for key, entry in shared_entries + proj_entries:
+    for key, entry in skill_entries:
         path = entry.get("path")
         if isinstance(path, str) and path:
             registered_paths.add(path.rstrip("/"))
@@ -573,40 +585,17 @@ def main() -> int:
         check(f"filesystem skill is registered: {rel}", rel in registered_paths,
               "package directory exists but has no registry entry")
 
-    # ---- 6b. Filesystem skill / project directory naming (kebab-case) ----
-    shared_base = os.path.join(ROOT, "skills/shared")
-    if os.path.isdir(shared_base):
-        for name in sorted(os.listdir(shared_base)):
+    # ---- 6b. Filesystem skill directory naming (kebab-case) ----
+    # Flat layout: every real directory under skills/ is a skill package.
+    skills_base = os.path.join(ROOT, "skills")
+    if os.path.isdir(skills_base):
+        for name in sorted(os.listdir(skills_base)):
             if name.startswith("."):
                 continue
-            if not os.path.isdir(os.path.join(shared_base, name)):
+            if not os.path.isdir(os.path.join(skills_base, name)):
                 continue  # metadata files (e.g. README.md) are not skill packages
-            check(f"filesystem skill directory kebab-case: skills/shared/{name}",
+            check(f"filesystem skill directory kebab-case: skills/{name}",
                   bool(KEBAB_RE.match(name)), name)
-    proj_base = os.path.join(ROOT, "skills/projects")
-    if os.path.isdir(proj_base):
-        for proj in sorted(os.listdir(proj_base)):
-            if proj.startswith("."):
-                continue
-            if not os.path.isdir(os.path.join(proj_base, proj)):
-                continue
-            check(f"filesystem project directory kebab-case: skills/projects/{proj}",
-                  bool(KEBAB_RE.match(proj)), proj)
-            proj_dir = os.path.join(proj_base, proj)
-            for name in sorted(os.listdir(proj_dir)):
-                if name.startswith("."):
-                    continue
-                if not os.path.isdir(os.path.join(proj_dir, name)):
-                    continue  # project README.md / metadata files are not skills
-                check(f"filesystem skill directory kebab-case: skills/projects/{proj}/{name}",
-                      bool(KEBAB_RE.match(name)), name)
-
-    # ---- 7. Duplicate skill identity ----
-    shared_names = {key for key, _ in shared_entries}
-    proj_names = {key for key, _ in proj_entries}
-    duplicates = shared_names & proj_names
-    check("no duplicate skill identity across projects/shared", not duplicates,
-          f"duplicates: {sorted(duplicates)}")
 
     # ---- 8/9. Capability schema + provider naming ----
     cap_entries = validate_capability_entries(caps_reg) if caps_ok else []
@@ -625,7 +614,7 @@ def main() -> int:
             check(f"provider directory kebab-case: {name}", bool(KEBAB_RE.match(name)), name)
 
     # ---- 10/11. Dependency registry parsing + foreign keys ----
-    skill_ids = shared_names | proj_names
+    skill_ids = {key for key, _ in skill_entries}
     capability_ids = {key for key, _ in cap_entries}
     if deps_ok:
         deps = deps_reg.get("dependencies")

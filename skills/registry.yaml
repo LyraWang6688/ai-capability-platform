@@ -1,13 +1,22 @@
 # Skill Domain Registry
-# Source of Truth for: Skill identity / path / lifecycle / version
-schema_version: 1
+# Source of Truth for: Skill identity / path / lifecycle / version / placement
+#
+# schema_version 2: `shared:` + `projects:` merged into ONE flat `skills:` map,
+# and placement moved out of the registry section into the record field `scope`.
+#
+# Why (breaking): the on-disk layout is flat (`skills/<name>/`). Agent Plugins
+# v1 §7.1 fixes skill discovery at `skills/`, treats each *immediate child*
+# directory containing SKILL.md as one skill, and states clients MUST NOT
+# recurse into deeper descendants. A nested layout such as
+# `skills/shared/<name>/` would therefore be invisible to conformant clients.
+# Classification is registry state, not a directory level.
+schema_version: 2
 
 domain: skills
-description: Skill identity, path, lifecycle status, and version.
+description: Skill identity, path, lifecycle status, version, and placement scope.
 
-projects: {}
-
-shared: {}
+# One flat mapping keyed by Skill identifier (map key == name). No sections.
+skills: {}
 
 allowed_statuses:
   - draft
@@ -16,34 +25,47 @@ allowed_statuses:
   - deprecated
   - archived
 
-# Skill Registry Schema (v1)
-# projects and shared are mappings keyed by Skill identifier (map key == name).
+# Skill Registry Schema (v2)
+#
+# `skills` is a single flat mapping keyed by Skill identifier.
+#
 # Required fields per entry:
 #   name      == map key, lowercase kebab-case
-#   path      relative repo path, a directory under the correct domain
-#             (skills/shared/<name>/ or skills/projects/<project>/<name>/)
-#             containing SKILL.md and agents/openai.yaml
+#   path      relative repo path; MUST be exactly skills/<name>/
+#             (flat layout, exactly 2 components), containing SKILL.md
+#             and agents/openai.yaml
 #   status    one of allowed_statuses
 #   version   semantic X.Y.Z (see VERSIONING.md)
 #   updated   YYYY-MM-DD
-# projects entries additionally require:
-#   project   owning project identifier (lowercase kebab-case)
 #
-# Example (shared):
-#   shared:
+# Optional fields:
+#   scope     shared | project   (default: shared)
+#             Placement is a RECORD FIELD, never a directory level — the
+#             directory stays flat so conformant clients can discover the skill.
+#   project   owning project identifier (lowercase kebab-case).
+#             Required when scope == project; rejected otherwise (carrying it
+#             without scope: project would recreate a second source of truth).
+#   notes     free-form
+#
+# Example (cross-project reusable):
+#   skills:
 #     repo-hygiene:
 #       name: repo-hygiene
-#       path: skills/shared/repo-hygiene
+#       path: skills/repo-hygiene
+#       scope: shared
 #       status: testing
 #       version: 0.1.0
 #       updated: "2026-10-01"
-# Example (project-specific):
-#   projects:
+#
+# Example (project-scoped):
+#   skills:
 #     meeting-analysis:
 #       name: meeting-analysis
+#       path: skills/meeting-analysis
+#       scope: project
 #       project: meeting-agent
-#       path: skills/projects/meeting-agent/meeting-analysis
 #       status: testing
 #       version: 0.1.0
 #       updated: "2026-10-01"
+#
 # Note: quote the date (or rely on YAML date parsing) — both are accepted.

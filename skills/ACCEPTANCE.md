@@ -34,7 +34,7 @@ Every PASS must be bound to evidence.
 
 At least:
 
-- correct placement (`skills/shared/<name>/` or `skills/projects/<project>/<name>/`)
+- correct placement (flat layout: `skills/<name>/` — one level, no nesting)
 - `SKILL.md` present
 - `agents/openai.yaml` present
 - registry entry present and valid (key == name, required fields complete)

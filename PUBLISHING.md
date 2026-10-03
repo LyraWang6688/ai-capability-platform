@@ -48,11 +48,12 @@ Tag / Release when applicable (namespaced Git Tag; Release for distributable art
 
 1. Confirm Human approval to publish the Skill.
 2. Reuse Scan against `skills/registry.yaml`.
-3. Placement:
-   - Cross-project reusable: `skills/shared/<skill-name>/`
-   - Project-specific: `skills/projects/<project-name>/<skill-name>/`
+3. Placement: always `skills/<skill-name>/` (flat — see `skills/README.md` for why).
+   Cross-project vs project-specific is recorded in the registry, not the path:
+   - Cross-project reusable: `scope: shared` (default)
+   - Project-specific: `scope: project` + `project: <project-name>`
 4. Preserve the Skill's native structure (`SKILL.md`, `agents/openai.yaml`, etc. — see `skills/README.md`).
-5. Register in `skills/registry.yaml` (name / path / status / version / updated, + project for project skills).
+5. Register in `skills/registry.yaml` (name / path / status / version / updated, + scope / project for project skills).
 6. If the Skill depends on External Capabilities, declare them in `dependencies/capability-map.yaml`.
 7. Bring or link tests/evidence (Gate 0-6 in `skills/ACCEPTANCE.md` apply to promotion, not just publication).
 

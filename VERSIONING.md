@@ -24,7 +24,7 @@ repo-hygiene-final/
 ## 2. Canonical Path Is Stable
 
 ```text
-skills/shared/repo-hygiene/
+skills/repo-hygiene/
 external-capabilities/mcp/feishu-cli-mcp-server/
 ```
 

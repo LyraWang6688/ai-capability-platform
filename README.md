@@ -88,8 +88,7 @@ ai-capability-store/
 │   ├── LIFECYCLE.md
 │   ├── VERSIONING.md              # Skill-specific supplement
 │   ├── ACCEPTANCE.md
-│   ├── shared/
-│   └── projects/
+│   └── <skill-name>/               # flat: one directory per skill, no nesting
 ├── external-capabilities/          # Domain B: External Capabilities (what can be called)
 │   ├── README.md
 │   ├── registry.yaml
@@ -108,8 +107,8 @@ ai-capability-store/
 
 ## Placement
 
-- Skill (shared): `skills/shared/<skill-name>/`
-- Skill (project): `skills/projects/<project-name>/<skill-name>/`
+- Skill: `skills/<skill-name>/` (flat, always one level — see `skills/README.md`;
+  cross-project vs project-specific is a registry field, not a path)
 - Store-managed MCP implementation: `external-capabilities/mcp/<capability-name>/`
 - Provider doc: `external-capabilities/providers/<provider-name>/README.md`
 

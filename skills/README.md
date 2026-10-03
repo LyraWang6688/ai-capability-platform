@@ -17,10 +17,32 @@ Skills and External Capabilities are **peer Domains**. A Plugin / MCP / Connecto
 
 ## Placement
 
-- Project-specific skill: `skills/projects/<project-name>/<skill-name>/`
-- Cross-project reusable skill: `skills/shared/<skill-name>/`
+**Flat layout — every skill lives at `skills/<skill-name>/` (exactly one level):**
 
-Do not duplicate the same skill across multiple projects. Move genuinely reusable skills to `shared/`.
+- `skills/<skill-name>/`
+
+**Why flat and not `skills/shared/<name>/` + `skills/projects/<project>/<name>/`:**
+
+Agent Plugins v1 §7.1 fixes skill discovery at `skills/`, treats each **immediate
+child directory** containing `SKILL.md` as one skill, and states clients
+**MUST NOT recursively search deeper descendants**. A nested layout would
+therefore be invisible to conformant clients — the skill would pass Store
+validation and then silently fail to install.
+
+**So placement is a registry field, not a directory level:**
+
+| Scope | How it is recorded |
+|---|---|
+| Cross-project reusable | `scope: shared` (the default) |
+| Project-specific | `scope: project` + `project: <project-name>` |
+
+<details>
+<summary>Migration note (schema_version 1 → 2)</summary>
+
+`schema_version: 1` used two registry sections (`shared:` / `projects:`) that
+encoded placement in the path. That is superseded: the path is now always
+`skills/<name>/`, and placement moved to the `scope` / `project` fields.
+</details>
 
 ## Skill Structure
 
