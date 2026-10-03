@@ -31,7 +31,8 @@ const { createWechatApi, readCredentialsFromEnv } = await import("./wechatApi.js
 
 const server = new McpServer({
   name: "wechat-draft-mcp",
-  version: "0.1.0"
+  // 必须与 package.json 的 version 一致（tests/mcpStdio.test.ts 里有断言守着）。
+  version: "0.2.0"
 });
 
 function text(value: unknown) {

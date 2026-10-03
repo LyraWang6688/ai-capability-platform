@@ -1,19 +1,38 @@
 {
   "name": "wechat-draft-mcp",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
   "type": "module",
   "description": "本地 MCP 服务：把磁盘上的文章创建成微信公众号草稿。只创建草稿，不发布。",
   "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "wechat",
+    "wechat-official-account",
+    "draft"
+  ],
   "bin": {
     "wechat-draft-mcp": "./dist/mcpServer.js"
   },
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./publish": "./dist/publish.js",
+    "./articleBundle": "./dist/articleBundle.js",
+    "./wechatApi": "./dist/wechatApi.js"
+  },
   "scripts": {
     "build": "tsc",
+    "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "build:test": "tsc -p tsconfig.test.json",
     "test": "npm run build:test && node --test \"dist-test/tests/**/*.test.js\"",
     "test:only": "node --test \"dist-test/tests/**/*.test.js\"",
+    "check:pack": "npm run typecheck && npm test && npm pack --dry-run",
     "mcp": "node dist/mcpServer.js",
     "cli": "node dist/cli.js"
   },
