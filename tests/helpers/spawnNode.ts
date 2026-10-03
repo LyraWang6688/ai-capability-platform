@@ -2,6 +2,7 @@
  * 子进程测试辅助：跑编译后的 CLI / MCP 入口，并保证环境里不带宿主的真实凭证。
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 /** 编译产物里的某个源文件（测试与源一起被 tsc 输出到 dist-test/）。 */
@@ -78,14 +79,27 @@ export class StdioMcpClient {
   readonly child: ChildProcessWithoutNullStreams;
 
   private buffer = "";
-  private readonly waiters = new Map<number, (message: JsonRpcMessage) => void>();
+  private readonly waiters = new Map<
+    number,
+    { resolve: (message: JsonRpcMessage) => void; reject: (error: Error) => void }
+  >();
   private nextId = 1;
 
-  constructor(args: string[], env: Record<string, string>) {
-    this.child = spawn(process.execPath, args, { env, stdio: ["pipe", "pipe", "pipe"] });
+  constructor(args: string[], env: Record<string, string>, nodeArgs: string[] = []) {
+    this.child = spawn(process.execPath, [...nodeArgs, ...args], { env, stdio: ["pipe", "pipe", "pipe"] });
     this.child.stdout.on("data", (chunk: Buffer) => this.consume(chunk.toString("utf8")));
     this.child.stderr.on("data", (chunk: Buffer) => {
       this.stderr += chunk.toString("utf8");
+    });
+    // 进程提前退出时立刻让所有等待中的请求失败，而不是干等到超时。
+    this.child.on("close", (code) => {
+      const pending = [...this.waiters.values()];
+      this.waiters.clear();
+      for (const waiter of pending) {
+        waiter.reject(
+          new Error(`MCP 进程退出（code=${code}），请求没有响应。stderr=${this.stderr.slice(-400)}`)
+        );
+      }
     });
   }
 
@@ -100,9 +114,15 @@ export class StdioMcpClient {
         this.waiters.delete(id);
         reject(new Error(`等待 ${method} 响应超时。stdout=${JSON.stringify(this.stdoutLines)}\nstderr=${this.stderr}`));
       }, 10_000);
-      this.waiters.set(id, (message) => {
-        clearTimeout(timer);
-        resolve(message);
+      this.waiters.set(id, {
+        resolve: (message) => {
+          clearTimeout(timer);
+          resolve(message);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        }
       });
     });
     this.write({ jsonrpc: "2.0", id, method, params });
@@ -159,8 +179,20 @@ export class StdioMcpClient {
       return;
     }
     if (typeof message.id === "number") {
-      this.waiters.get(message.id)?.(message);
+      this.waiters.get(message.id)?.resolve(message);
       this.waiters.delete(message.id);
     }
+  }
+}
+
+/**
+ * stdout 纯净性：stdio 模式下 stdout 就是 JSON-RPC 通道，
+ * 任何一行日志混进去都会让宿主「连接器已连接但一个工具都没有」。
+ */
+export function assertStdoutPristine(client: StdioMcpClient): void {
+  assert.deepEqual(client.nonJsonLines, [], `stdout 混入了非 JSON 内容：${client.nonJsonLines.join("\n")}`);
+  for (const line of client.stdoutLines) {
+    const message = JSON.parse(line) as { jsonrpc?: string };
+    assert.equal(message.jsonrpc, "2.0", `stdout 里混入了非 JSON-RPC 消息：${line}`);
   }
 }
