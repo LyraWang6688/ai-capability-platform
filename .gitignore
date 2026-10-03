@@ -5,6 +5,11 @@ dist-test/
 *.tgz
 # 连通性验证用的测试文章包（含图片与元数据，不进版本库）
 smoke-article/
+# 交接文档：只在本机维护，不进版本库。
+# 理由：里面大量是会随时间漂移的会话状态（版本号、测试数、各类 ID），
+# 而且它会随 git subtree 一起被镜像进 AI Capability Store —— 与其在多处硬编码再逐处收敛，
+# 不如让它根本不进版本库（单一事实源：版本看 Store 注册表，测试数看 npm test 输出）。
+HANDOFF.md
 .env
 .env.*
 !.env.example
