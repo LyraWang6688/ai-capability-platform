@@ -26,12 +26,12 @@ capabilities:
     type: mcp
     status: limited
     provider_path: external-capabilities/providers/wechat/README.md
-    version: 0.1.0
+    version: 0.2.0
     implementation_path: external-capabilities/mcp/wechat-draft-mcp
     auth: "宿主注入环境变量 WECHAT_APP_ID / WECHAT_APP_SECRET，用于换取 access_token；调用方出口 IP 必须加入公众号 IP 白名单"
     capabilities: "把磁盘上的文章文件夹创建为微信草稿：上传前预检、创建草稿、按 media_id 读回核对。只创建草稿，不发布、不群发、不删除"
     permissions: "需要公众号的草稿箱与永久素材接口权限（draft/add、draft/get、draft/count、media/uploadimg、material/add_material），并需将出口 IP 加入白名单；未认证个人订阅号实测可用"
-    notes: "自研、Store-managed。来源仓库为独立 git 仓库，已通过 git subtree 导入并保留完整提交历史；实现目录内含 README.md、HANDOFF.md 与 106 项自动化测试"
+    notes: "自研、Store-managed。来源仓库为独立 git 仓库，已通过 git subtree 导入并保留完整提交历史；实现目录内含 README.md、HANDOFF.md 与 112 项自动化测试"
 
   feishu-cli-mcp-server:
     name: feishu-cli-mcp-server
