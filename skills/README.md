@@ -78,7 +78,11 @@ Required fields per skill entry (when registered):
 - `path`
 - `status`
 - `version`
-- `updated`
+- `updated` — the date this **registry record** was last updated. For a newly
+  registered skill that is the registration date. It tracks the record, not the
+  skill's content (content versions are tracked by `version`); the two coincide
+  from the first iteration onward and differ only when an older skill is
+  registered for the first time.
 
 Project-specific skills should also be associated with a project.
 

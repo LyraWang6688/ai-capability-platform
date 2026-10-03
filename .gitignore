@@ -1,0 +1,4 @@
+# macOS Finder metadata. A pattern without a slash matches at every level, so
+# this one line covers every directory. Without it, `git add -A` silently
+# commits .DS_Store into the Store.
+.DS_Store

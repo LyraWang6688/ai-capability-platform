@@ -43,7 +43,12 @@ allowed_statuses:
 #             and agents/openai.yaml
 #   status    one of allowed_statuses
 #   version   semantic X.Y.Z (see VERSIONING.md)
-#   updated   YYYY-MM-DD
+#   updated   YYYY-MM-DD — the date this REGISTRY RECORD was last updated.
+#             For a newly registered skill that is the registration date.
+#             It tracks the RECORD, not the skill's content — content versions
+#             are tracked by `version`. The two coincide from the first
+#             iteration onward; they differ only when an older skill is
+#             registered for the first time.
 #
 # Optional fields:
 #   scope     shared | project   (default: shared)
