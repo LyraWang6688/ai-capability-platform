@@ -17,7 +17,7 @@ dependencies: []
 #         required: true | false
 #         notes: optional free-form
 #
-# Uniqueness contract (validated by scripts/validate_platform.py):
+# Uniqueness contract (validated by scripts/validate_store.py):
 #   - one dependency entry per skill
 #   - one requirement entry per capability within a skill
 # No precedence is defined: ambiguity fails validation.

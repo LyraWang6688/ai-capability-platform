@@ -41,7 +41,7 @@ At least:
 - valid version (`X.Y.Z`)
 - valid lifecycle (`draft | testing | active | deprecated | archived`)
 - no broken required path
-- `python3 scripts/validate_platform.py` PASS
+- `python3 scripts/validate_store.py` PASS
 
 ## Gate 1 — Trigger Quality
 
@@ -50,7 +50,7 @@ Must define and test:
 - Positive Trigger Cases
 - Negative Trigger Cases
 
-Platform v0.1 initial acceptance thresholds
+Store v0.1 initial acceptance thresholds
 (this is the AI Capability Store's own initial threshold,
 not a vendor-mandated standard):
 
