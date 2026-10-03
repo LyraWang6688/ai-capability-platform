@@ -32,12 +32,21 @@ external-capabilities/mcp/<capability-name>/     # Store-managed MCP implementat
 
 Use lowercase kebab-case for provider identifiers.
 
-Store-managed implementation shelf: the Store hosts and maintains code for some
-capabilities (e.g. its own MCP servers). Store-managed implementations live
-under `external-capabilities/mcp/<capability-name>/`. Shelves for other types
-(cli/ / connector/ / api/ / plugin/) are created only when a real asset needs
-them. The Store fixes the asset ROOT location only; it does NOT prescribe the
-internal source layout of an MCP (Node / Python / Go projects keep their own
+## Scope Policy — Store-managed only
+
+**This Store accepts Store-managed capabilities ONLY** — code the Store itself
+hosts and maintains. Third-party capabilities whose code lives elsewhere (pure
+external connectors / APIs) are **NOT** registered here.
+
+If that policy ever changes, the schema must gain an **explicit hosting
+declaration** (a required enum field). Do not infer intent from a missing
+`implementation_path` — that is precisely the ambiguity this policy removes.
+
+Store-managed implementations live under
+`external-capabilities/mcp/<capability-name>/`. Shelves for other types
+(`cli/` / `connector/` / `api/` / `plugin/`) are created only when a real asset
+needs them. The Store fixes the asset ROOT location only; it does NOT prescribe
+the internal source layout of an MCP (Node / Python / Go projects keep their own
 native structure).
 
 ## Registry
@@ -61,14 +70,20 @@ A capability record requires:
 - `type`          — one of: plugin / mcp / connector / cli / external-api / integration
 - `status`        — one of: available / limited / disabled / unknown
 - `provider_path` — `external-capabilities/providers/<provider>/README.md` (must exist)
+- `version`       — semantic X.Y.Z (Store-recommended version; see `VERSIONING.md`)
+- `implementation_path`
+                  — relative repo path to the Store-managed code; must exist,
+                    must be relative with no `../`, and must live under
+                    `external-capabilities/`
+
+> `version` and `implementation_path` are **required, not optional**. While they
+> were optional, an entry that simply omitted `implementation_path` skipped
+> every implementation check and still reported a clean run — pointing at no
+> code at all. A missing field is now an error rather than a
+> different-but-valid shape.
 
 Optional, when known:
 
-- `version`              — semantic X.Y.Z (Store-recommended version; see `VERSIONING.md`)
-- `implementation_path`  — relative repo path to Store-managed code; when present it
-                           must exist, live under `external-capabilities/`, and the
-                           entry must declare a valid `version` (Store-managed capability).
-                           Pure external capabilities omit it.
 - `auth`          — authentication model (metadata only)
 - `capabilities`  — what the capability can do
 - `permissions`   — verified permissions only

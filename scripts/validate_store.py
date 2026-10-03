@@ -40,12 +40,13 @@ Checks:
         ignored -- present on disk, uninstallable, and reported by nothing.
         This closes Issue #2 item 4.
     7.  duplicate skill identity across projects/shared FAILS
-    8.  capability record required fields (name/provider/type/status/provider_path),
-        type/status enums, map key == name, provider kebab-case,
-        provider_path location and existence
-    8b. implementation_path conditional contract: when present, the path must
-        exist, must be relative with no ../, must live under external-capabilities/,
-        and the entry MUST declare a valid semantic version (Store-managed)
+    8.  capability record required fields (name/provider/type/status/
+        provider_path/implementation_path/version), type/status enums,
+        map key == name, provider kebab-case, provider_path location and exists
+    8b. Store-managed contract: implementation_path is REQUIRED (this Store
+        accepts Store-managed capabilities only), the path must exist, must be
+        relative with no ../, and must live under external-capabilities/;
+        version must be a valid semantic version
     9.  provider identifiers and provider directory names are lowercase kebab-case
     10. dependency registry is parsed and its top-level contract validated
     11. dependency foreign keys: skill must exist in skills registry,
@@ -481,7 +482,14 @@ def validate_capability_entries(reg: dict):
             check(f"capability record is a mapping: {key}", False, type(entry).__name__)
             continue
         collected.append((key, entry))
-        for field in ("name", "provider", "type", "status", "provider_path"):
+        # Required fields. `implementation_path` and `version` are required
+        # because this Store accepts Store-managed capabilities ONLY (see
+        # external-capabilities/README.md). They used to be optional, which made
+        # every implementation check below conditional -- an entry that omitted
+        # implementation_path skipped all of them and still reported a clean
+        # run, while pointing at no code. Absent is now an error.
+        for field in ("name", "provider", "type", "status", "provider_path",
+                      "implementation_path", "version"):
             val = entry.get(field)
             present = val is not None
             check(f"capability {key} has required field: {field}", present,
@@ -522,25 +530,20 @@ def validate_capability_entries(reg: dict):
             check(f"capability {key} version X.Y.Z",
                   isinstance(version, str) and bool(VERSION_RE.match(version)),
                   f"version={version!r} type={type(version).__name__}")
-        # Conditional contract: when implementation_path is present the Store
-        # hosts the code — the path must be relative, live under
-        # external-capabilities/, exist, and the entry MUST declare a version.
+        # Store-managed contract: implementation_path is REQUIRED (declared
+        # above), so here the path must be relative, live under
+        # external-capabilities/, and actually exist. Previously this whole
+        # block was guarded by `if impl is not None`, so omitting the field
+        # silently skipped every line of it.
         impl = entry.get("implementation_path")
-        if impl is not None and (not isinstance(impl, str) or impl):
-            if isinstance(impl, str) and impl:
-                iparts = impl.split("/")
-                check(f"capability {key} implementation_path relative",
-                      not os.path.isabs(impl) and ".." not in iparts, impl)
-                check(f"capability {key} implementation_path under external-capabilities/",
-                      impl.startswith("external-capabilities/"), impl)
-                check(f"capability {key} implementation_path exists",
-                      os.path.isdir(os.path.join(ROOT, impl)), impl)
-                check(f"capability {key} store-managed requires version",
-                      isinstance(version, str) and bool(VERSION_RE.match(version)),
-                      f"version={version!r}")
-            else:
-                check(f"capability {key} implementation_path is a string",
-                      False, f"implementation_path={impl!r}")
+        if isinstance(impl, str) and impl:
+            iparts = impl.split("/")
+            check(f"capability {key} implementation_path relative",
+                  not os.path.isabs(impl) and ".." not in iparts, impl)
+            check(f"capability {key} implementation_path under external-capabilities/",
+                  impl.startswith("external-capabilities/"), impl)
+            check(f"capability {key} implementation_path exists",
+                  os.path.isdir(os.path.join(ROOT, impl)), impl)
     return collected
 
 
