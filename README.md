@@ -63,6 +63,17 @@ node --env-file=.env dist/cli.js inspect "/绝对路径/文章目录"
 node --env-file=.env dist/cli.js upload  "/绝对路径/文章目录"
 ```
 
+## 测试
+
+```bash
+npm test          # 编译 src+tests 到 dist-test/，跑 106 项测试（约 2 秒）
+npm run test:only # 跳过编译，直接重跑
+```
+
+零额外依赖（node 内置 test runner），不联网、不碰真实公众号：mock 微信服务器是
+本地 HTTP 服务，覆盖文章包解析、内容指纹幂等、`creating` 状态锁定、路径沙箱、
+错误码分类，以及 MCP stdio 通道的 **stdout 纯净性**（协议不能被日志污染）。
+
 ## 边界
 
 - 不做 Markdown → HTML 转换。正文排版由创作侧负责。

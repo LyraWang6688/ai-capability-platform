@@ -201,7 +201,7 @@ export async function publishArticleBundle(options: PublishOptions): Promise<Pub
 /** 只替换指定 src 属性值，不动其他内容。 */
 export function rewriteImageSrc(html: string, from: string, to: string): string {
   const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return html.replace(new RegExp(`(\\bsrc\\s*=\\s*)(["'])${escaped}\\2`, "gi"), `$1$2${to}$2`);
+  return html.replace(new RegExp(`((?:^|\\s)src\\s*=\\s*)(["'])${escaped}\\2`, "gi"), `$1$2${to}$2`);
 }
 
 async function verifyDraft(api: WechatApi, mediaId: string, expectedTitle: string): Promise<boolean> {

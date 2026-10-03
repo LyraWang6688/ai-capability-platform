@@ -221,12 +221,15 @@ export function ensureCredentialShape(credentials: WechatCredentials) {
   // 宿主平台未替换 ${VAR} 占位符时会把字面量传进来。这时报「AppID 无效」会让用户
   // 反复核对其实填对了的内容，而问题出在平台注入环节，必须区分开。
   const placeholder = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
-  if (placeholder.test(credentials.appId) || placeholder.test(credentials.appSecret)) {
+  // 凭证是从宿主配置跨边界传进来的，运行时可能是 undefined，先归一化再判断。
+  const appId = (credentials.appId ?? "").trim();
+  const appSecret = (credentials.appSecret ?? "").trim();
+  if (placeholder.test(appId) || placeholder.test(appSecret)) {
     throw new WechatApiError(
       "凭证未被注入：读到的仍是占位符。这不是你填错了，是平台尚未把凭证传给连接器。请在连接器配置页重新填写并保存，然后重连后重试。"
     );
   }
-  if (!credentials.appId || !credentials.appSecret) {
+  if (!appId || !appSecret) {
     throw new WechatApiError("缺少公众号凭证：请在连接器配置里填写 AppID 与 AppSecret，不要在聊天中发送密钥。");
   }
 }

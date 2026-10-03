@@ -88,10 +88,7 @@ export async function loadArticleBundle(
   const metaResult = await readMetadata(dir);
   const assets = await readAssets(dir);
   const extracted = extractFromHtml(normalizedHtml);
-  const meta = mergeMeta({ file: metaResult.data, extracted, env });
-  for (const [key, source] of Object.entries(metaResult.sources)) {
-    meta.sources[key] = source;
-  }
+  const meta = mergeMeta({ file: metaResult.data, fileSources: metaResult.sources, extracted, env });
 
   const bodyImages = await collectBodyImages(contentHtml, dir, warnings);
   const remoteImages = collectRemoteImages(contentHtml);
@@ -228,11 +225,13 @@ function extractFromHtml(html: string) {
 
 function mergeMeta(input: {
   file: Record<string, unknown>;
+  /** 来自元数据文件的字段来源，先铺底，后面的推断再覆盖。 */
+  fileSources: Record<string, string>;
   extracted: ReturnType<typeof extractFromHtml>;
   env: NodeJS.ProcessEnv;
 }) {
   const values: { title: string; author?: string; digest?: string; column?: string } = { title: "" };
-  const sources: Record<string, string> = {};
+  const sources: Record<string, string> = { ...input.fileSources };
 
   const fileTitle = asString(input.file.title);
   const fileAuthor = asString(input.file.author);
@@ -247,7 +246,9 @@ function mergeMeta(input: {
   if (!fileTitle && input.extracted.title) sources.title = "HTML";
   if (!fileAuthor && input.extracted.author) sources.author = "HTML";
   if (!fileDigest && input.extracted.digest) sources.digest = "HTML";
-  if (!values.author && input.env.WECHAT_DEFAULT_AUTHOR) sources.author = "WECHAT_DEFAULT_AUTHOR";
+  // 之前这里写成 `!values.author` —— 但默认作者已经写进 values.author，条件永远为假，
+  // 于是 inspect 输出里看不出作者是「env 默认值」，会让人误以为文章自带作者。
+  if (!fileAuthor && !input.extracted.author && values.author) sources.author = "WECHAT_DEFAULT_AUTHOR";
 
   if (values.digest && [...values.digest].length > LIMITS.digestChars) {
     values.digest = [...values.digest].slice(0, LIMITS.digestChars).join("");
@@ -258,7 +259,9 @@ function mergeMeta(input: {
 }
 
 const IMG_TAG = /<img\b[^>]*>/gi;
-const SRC_ATTR = /\bsrc\s*=\s*["']([^"']+)["']/i;
+// 必须是独立的 src 属性：`\bsrc` 会连 `data-src="..."` 一起匹配（`-` 与 `s` 之间存在
+// 词边界），那样懒加载图会被当成真图去读，用户永远收不到「data-src 不会渲染」的警告。
+const SRC_ATTR = /(?:^|\s)src\s*=\s*["']([^"']+)["']/i;
 
 async function collectBodyImages(contentHtml: string, dir: string, warnings: string[]): Promise<BodyImage[]> {
   const seen = new Map<string, BodyImage>();

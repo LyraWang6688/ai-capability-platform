@@ -10,6 +10,9 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "build:test": "tsc -p tsconfig.test.json",
+    "test": "npm run build:test && node --test \"dist-test/tests/**/*.test.js\"",
+    "test:only": "node --test \"dist-test/tests/**/*.test.js\"",
     "mcp": "node dist/mcpServer.js",
     "cli": "node dist/cli.js"
   },

@@ -15,10 +15,13 @@ import path from "node:path";
 /** 即使用户放开了根目录限制，这些目录也永远不读。 */
 const FORBIDDEN_PREFIXES = [
   "/etc",
+  // macOS 上 /etc 是指向 /private/etc 的符号链接，而校验发生在 realpath 之后，
+  // 所以私有路径必须单独列出，否则 /etc/hosts 会绕过黑名单。
+  "/private/etc",
   "/var/root",
+  "/private/var/root",
   "/System",
-  "/Library/Keychains",
-  "/private/var/root"
+  "/Library/Keychains"
 ];
 
 const FORBIDDEN_HOME_ENTRIES = [
@@ -70,7 +73,7 @@ export async function resolveSafePath(input: string, env: NodeJS.ProcessEnv = pr
     throw new PathNotAllowedError("PATH_NOT_FOUND", "找不到该路径，请确认文件或目录存在。");
   }
 
-  const home = process.env.HOME || "";
+  const home = env.HOME || process.env.HOME || "";
   const denied = [
     ...FORBIDDEN_PREFIXES,
     ...FORBIDDEN_HOME_ENTRIES.map((entry) => (home ? path.join(home, entry) : ""))
@@ -103,6 +106,9 @@ function isInside(target: string, prefix: string): boolean {
 /**
  * 解析文章包内的相对引用（如 HTML 里的 `images/fig1.png`、assets.json 里的 `assets/cover.jpg`）。
  * 相对引用必须落在文章包目录内。
+ *
+ * 先做词法比较，再对存在的文件做 realpath 复核：
+ * 只做词法比较的话，包内一个指向 `~/.ssh/id_rsa` 的符号链接就能把包外文件读进来。
  */
 export async function resolveInsideBundle(bundleDir: string, relative: string): Promise<string> {
   if (path.isAbsolute(relative)) {
@@ -111,6 +117,15 @@ export async function resolveInsideBundle(bundleDir: string, relative: string): 
   const candidate = path.resolve(bundleDir, relative);
   if (!isInside(candidate, bundleDir)) {
     throw new PathNotAllowedError("REFERENCE_ESCAPE", "文章包内的图片引用不能指向包外。");
+  }
+  try {
+    const real = await realpath(candidate);
+    if (!isInside(real, await realpath(bundleDir))) {
+      throw new PathNotAllowedError("REFERENCE_ESCAPE", "文章包内的图片引用不能指向包外。");
+    }
+  } catch (error) {
+    if (error instanceof PathNotAllowedError) throw error;
+    // 文件不存在等情况交给调用方按「图片缺失」处理，保持原有提示语义。
   }
   return candidate;
 }
