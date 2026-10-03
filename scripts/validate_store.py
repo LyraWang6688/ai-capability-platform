@@ -34,6 +34,11 @@ Checks:
         the ecosystem gate, so a skill that cannot be installed cannot pass
     6.  registry <-> filesystem symmetry: a skill package directory on disk
         without a registry entry FAILS (and vice versa)
+    6a-bis. no MISPLACED (nested) skill packages: a SKILL.md anywhere below
+        skills/<name>/ FAILS. Discovery is non-recursive (correct, per Agent
+        Plugins v1 §7.1), which used to mean such a package was silently
+        ignored -- present on disk, uninstallable, and reported by nothing.
+        This closes Issue #2 item 4.
     7.  duplicate skill identity across projects/shared FAILS
     8.  capability record required fields (name/provider/type/status/provider_path),
         type/status enums, map key == name, provider kebab-case,
@@ -558,6 +563,36 @@ def discover_skill_packages():
     return found
 
 
+def find_misplaced_skill_packages():
+    """Find every SKILL.md that is NOT at the flat position `skills/<name>/`.
+
+    `discover_skill_packages` above is deliberately non-recursive, which is
+    correct but leaves a blind spot: a package sitting at e.g.
+    `skills/shared/ghost/SKILL.md` is invisible to conformant clients (Agent
+    Plugins v1 §7.1 forbids recursion) AND was invisible to this validator, so
+    it passed as a clean run while being uninstallable. That is a silent
+    failure — the package exists on disk, no client can load it, and nothing
+    says so. This walks the whole tree to close that gap.
+
+    Documented as Issue #2 item 4 and deferred on 2026-10-01; the impact grew
+    once the flat layout became mandatory, because any nesting is now
+    unambiguously wrong rather than merely unconventional."""
+    misplaced = []
+    base = os.path.join(ROOT, "skills")
+    if not os.path.isdir(base):
+        return misplaced
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        if "SKILL.md" not in filenames:
+            continue
+        rel = os.path.relpath(dirpath, ROOT).replace(os.sep, "/")
+        parts = rel.split("/")
+        if len(parts) == 2 and parts[0] == "skills":
+            continue  # correct flat position
+        misplaced.append(rel)
+    return sorted(misplaced)
+
+
 def main() -> int:
     # ---- 1. Top-level registry (root must be a mapping) ----
     top, ok = load_yaml("registry.yaml")
@@ -665,6 +700,17 @@ def main() -> int:
     for rel in discover_skill_packages():
         check(f"filesystem skill is registered: {rel}", rel in registered_paths,
               "package directory exists but has no registry entry")
+
+    # ---- 6a-bis. No nested (misplaced) skill packages ----
+    # A SKILL.md below skills/<name>/ is invisible to conformant clients, so it
+    # must be reported rather than silently ignored. See
+    # find_misplaced_skill_packages() and Issue #2 item 4.
+    misplaced = find_misplaced_skill_packages()
+    check("no nested skill packages under skills/", not misplaced,
+          "misplaced SKILL.md found at " + ", ".join(misplaced)
+          + " — the flat layout is skills/<name>/ (exactly one level); "
+            "Agent Plugins v1 §7.1 forbids clients from recursing, so a nested "
+            "package is uninstallable")
 
     # ---- 6b. Filesystem skill directory naming (kebab-case) ----
     # Flat layout: every real directory under skills/ is a skill package.
