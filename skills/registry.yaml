@@ -24,6 +24,18 @@ skills:
     status: testing
     version: 0.1.0
     updated: "2026-10-03"
+  store-publish:
+    name: store-publish
+    path: skills/store-publish
+    scope: shared
+    status: testing
+    version: 0.1.0
+    updated: "2026-10-03"
+    notes: >
+      The procedure this Store uses to onboard its own assets. Proven once end
+      to end (PR #8 onboarded repo-hygiene through it), but still `testing`:
+      0.1.0 cannot be `active` — VERSIONING.md §4 requires major >= 1 — and no
+      trigger harness exists yet.
 
 allowed_statuses:
   - draft
