@@ -9,12 +9,35 @@ description: 把王颖的能力资产（Skill / MCP / Plugin / CLI）按 AI Capa
 
 > LLM 判断。脚本保护。人批准。
 
+## 环境准备（每次会话跑一次）
+
+Store 的验证器和本 skill 的脚本都需要 **PyYAML**，而很多机器的系统 `python3` 没有它。
+
+**不要往系统 Python 里装。** 建一个独立的 venv：
+
+```bash
+STORE=$(python3 <skill-dir>/scripts/store_root.py)
+python3 -m venv "$STORE/.venv"
+"$STORE/.venv/bin/pip" install -r "$STORE/requirements-dev.txt"
+```
+
+之后**一律用这个解释器**跑验证：
+
+```bash
+"$STORE/.venv/bin/python" "$STORE/scripts/validate_store.py"
+```
+
+**⚠️ 不要用 `/tmp` 存放依赖** —— 系统会清理它，下一个会话又得重装。
+放在 `<store>/.venv/` 里是持久的，而且 Store 的 `.gitignore` 会忽略它。
+
+> 如果 `$STORE/.venv` 已经存在，直接用，不用重建。
+
 ## 第一步：读契约（按顺序，不可跳）
 
 读 **Store 仓库**里的这 6 份文件。先定位仓库根：
 
 ```bash
-python3 scripts/store_root.py     # 输出仓库绝对路径
+python3 <skill-dir>/scripts/store_root.py     # 输出仓库绝对路径
 ```
 
 | # | 文件 | 回答什么 |

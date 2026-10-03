@@ -8,6 +8,61 @@
 - 读目标实体本身，再动手（`AGENTS.md` 必读顺序第 9 项）。
 - 按顺序重读 6 份契约——**规则可能已经变过**。
 
+## 0b. 改动从哪来？—— 先判断这一条
+
+```
+这个资产的内容，是【住在 Store 里】，还是要【从别处同步】？
+  │
+  ├─ 直接在 Store 里改            → 往下走 §1（正常迭代）
+  │
+  └─ 源仓库在别处，改的是那边      → 走 §0c（subtree pull 同步）
+      （首次导入时用了 git subtree 的，都属于这种）
+```
+
+**怎么判断**：看注册表的 `implementation_path`，以及当初是怎么搬进来的——
+用了 `git subtree add` 的就是**镜像**关系。
+
+## 0c. 源仓库在别处 —— 用 subtree pull 同步
+
+### ⚠️ 先记住：不要在 Store 里单方面改
+
+```
+源仓库（比如 ~/Documents/workplace/wechat-draft-mcp）
+        │  git subtree add
+        ↓
+Store（external-capabilities/mcp/<name>/）
+        ↑ 这两份是【镜像】
+```
+
+**在 Store 里单方面改镜像内容，会破坏这层关系** —— 下次 pull 冲突，
+而且两个仓库从此说的不是一回事。
+
+→ **要改就在源仓库改，再 pull 回来。**
+
+### 步骤
+
+```bash
+# ① 在源仓库改并提交
+cd <源仓库路径>
+# …编辑、测试…
+git add -A
+git commit -m "<按源仓库自己的规范>"
+
+# ② pull 进 Store（先开 feature 分支，不直推 main）
+cd <store>
+git checkout -b <feature-branch>
+git subtree pull --prefix=<prefix> <源仓库路径> <branch>
+
+# ③ 注册表要跟着变就改它（版本、notes……）
+# ④ 回到 §3 往下走：验证 → 停下等人批准 → 提交
+```
+
+- `<prefix>` 就是注册表里 `implementation_path` 的值，
+  例如 `external-capabilities/mcp/wechat-draft-mcp`
+- ⚠️ `git subtree pull` **只 pull 已提交的内容**。
+  源仓库有未提交改动 → 先提交，**或者先停下来问王颖**
+- ⚠️ 不确定这次改动该在源仓库做还是在 Store 做 → **停下来问王颖**
+
 ## 1. 判断改动级别
 
 依据 `VERSIONING.md` §4：
@@ -53,16 +108,25 @@ python3 <store>/scripts/validate_store.py
 
 - feature 分支 → PR（不直推 main）
 - commit message：`update(skill): refine <skill-name>`（或 capability 对应写法）
-- **合并后**打名字空间 tag：
+- **合并后**打名字空间 tag —— 用**附注 tag**（`-a`）：
 
 ```bash
-git tag <asset-name>-v<X.Y.Z>
+git tag -a <asset-name>-v<X.Y.Z> <合并后的提交> -m "<asset-name> v<X.Y.Z>
+
+<一两句：这次发布了什么、status 是什么>"
 git push origin <asset-name>-v<X.Y.Z>
 ```
 
 ```
 ⚠️ 不要用 v0.1.0 这种全仓通用的 tag —— 一个仓库装多个资产，会撞车。
    （VERSIONING.md §6）
+
+⚠️ 必须用 -a 打【附注 tag】，不要用轻量 tag。
+   轻量 tag 只是一个指针；附注 tag 才记录打 tag 的人、时间、说明，
+   也就是"这一版是什么时候、由谁发布的"。
+
+⚠️ 打在【已合并进 main 之后】的提交上，不要在 feature 分支上打
+   —— 分支会被删除，tag 会变成悬空引用。
 ```
 
 ## 7. 不删历史

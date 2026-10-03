@@ -197,14 +197,18 @@ python3 <store>/scripts/validate_store.py
 
 ```bash
 git checkout main && git pull
-git tag <asset-name>-v<X.Y.Z>
+git tag -a <asset-name>-v<X.Y.Z> <合并后的提交> -m "<asset-name> v<X.Y.Z>
+
+<一两句：这是什么资产、status 是什么、有什么前提>"
 git push origin <asset-name>-v<X.Y.Z>
 ```
 
 例：
 
 ```bash
-git tag repo-hygiene-v0.1.0
+git tag -a repo-hygiene-v0.1.0 a28a72a -m "repo-hygiene v0.1.0
+
+First Store registration. Status: testing."
 git push origin repo-hygiene-v0.1.0
 ```
 
@@ -216,17 +220,21 @@ git push origin repo-hygiene-v0.1.0
 而且 `VERSIONING.md` §6 规定不可变历史由**名字空间 tag**承载，§7 规定消费方可以钉到 tag。
 **不打 tag，这两条契约就是空的。**
 
-### 两条禁令
+### 三条禁令
 
 ```
 ⚠️ 绝不要用 v0.1.0 这种全仓通用的 tag
    —— 一个仓库装多个资产，必然撞车。
    <asset-name>-v<X.Y.Z> 里的资产名不能省。
 
-⚠️ tag 是可逆的，不要当成"发版"而犹豫
+⚠️ 必须用 -a 打【附注 tag】，不要用轻量 tag
+   轻量 tag 只是一个指针；附注 tag 才记录打 tag 的人、时间、说明，
+   也就是"这一版是什么时候、由谁发布的"。
+
+⚠️ 出错了不要慌，tag 是可逆的
    删本地: git tag -d <name>
    删远端: git push origin --delete <name>
-   它只是给某个提交贴一个永久标签，不改变任何内容。
+   改类型: 删掉再用 -a 重打，指向同一个提交即可
 ```
 
 ### 打在哪个提交上
