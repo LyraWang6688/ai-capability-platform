@@ -1,0 +1,31 @@
+{
+  "name": "feishu-cli-mcp-server",
+  "version": "0.1.0",
+  "description": "A modular MCP server that exposes controlled Feishu/Lark operations through the official lark-cli.",
+  "type": "module",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/server.js",
+    "smoke": "node scripts/smoke.mjs",
+    "security-smoke": "node scripts/security-smoke.mjs && node scripts/oauth-http-smoke.mjs && node scripts/cli-capacity-smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
+    "jose": "6.2.10",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.19.25",
+    "tsx": "4.23.13",
+    "typescript": "^5.9.3"
+  }
+}
