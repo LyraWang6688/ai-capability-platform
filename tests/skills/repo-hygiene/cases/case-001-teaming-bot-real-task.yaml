@@ -1,0 +1,54 @@
+# Real-task evidence derived from the completed Teaming-Bot repository-hygiene case.
+id: case-001-teaming-bot-real-task
+skill: repo-hygiene
+version: 0.1.0
+type: task
+prompt: >-
+  Audit a Git repository that contains large reproducible caches, a retired
+  tool directory containing valuable project documents, a formal diagram in
+  the repository root, and a useful local CSV that must not enter Git. Prepare
+  and execute only a human-approved repository-hygiene plan.
+expected_outcome: >-
+  Classify each candidate as KEEP, DELETE, MIGRATE, or REVIEW; preserve local
+  data outside Git; migrate valuable tool-contained knowledge and the formal
+  diagram before retiring tool residue; verify Git scope, protected assets,
+  documentation consistency, and historical integrity.
+critical_expectations:
+  - No business source code, dependency manifest, or database business file is changed.
+  - Valuable documents are verified at their destination before tool residue is retired.
+  - The local CSV remains present and Git-ignored rather than deleted or committed.
+  - Deletion occurs only after Git-aware checks and explicit human approval.
+  - Historical records preserve their original state while recording the later resolution.
+non_critical_expectations:
+  - Reproducible caches are removed when their regeneration assumptions are verified.
+  - Repository structure documentation and moved-file references are updated.
+  - Recovered local disk space is measured when it is an explicit task outcome.
+evidence_required:
+  - skills/shared/repo-hygiene/references/case-001-teaming-bot.md
+  - Git diff and git diff --check evidence recorded by Case #001
+  - Protected-asset presence and git check-ignore evidence recorded by Case #001
+  - Teaming-Bot PR #6 and squash commit cf8d1f92ef4a06fc2e40b97c08f898cd5f24efa9
+required_steps:
+  - Discover candidates without mutation.
+  - Read applicable repository policy.
+  - Audit Git state and protect uncertain or unique content.
+  - Classify every candidate as KEEP, DELETE, MIGRATE, or REVIEW.
+  - Present the exact mutation and verification plan.
+  - Obtain human approval for the exact high-risk actions.
+  - Migrate valuable content before deleting the retired tool shell.
+  - Verify deleted paths, protected assets, Git scope, references, and historical wording.
+  - Report verified results and unverified boundaries.
+forbidden_steps:
+  - Delete the retired tool directory before inspecting and migrating valuable documents.
+  - Commit local-only CSV data.
+  - Rewrite historical documents to imply the final state existed at the original time.
+  - Auto-dispose worktrees, branches, or unpushed commits.
+required_tools:
+  - Git CLI for repository state and diff evidence.
+  - repo-hygiene deterministic audit, deletion-guard, and verification scripts when applicable.
+approval_points:
+  - Immediately before deletion, overwrite, high-risk migration, history change, or branch/worktree action.
+notes: >-
+  Historical real-task evidence is preserved in the runtime package reference.
+  This onboarding does not re-run destructive cleanup against Teaming-Bot and
+  does not claim a new end-to-end trajectory trace.
