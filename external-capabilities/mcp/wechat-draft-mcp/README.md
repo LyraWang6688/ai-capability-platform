@@ -48,6 +48,36 @@
 | `WECHAT_DRAFT_STATE_DIR` | 否 | 幂等账本目录，默认 `~/.wechat-draft-capability/state` |
 | `WECHAT_DRAFT_ALLOWED_ROOTS` | 否 | 允许读取的文章根目录，逗号分隔 |
 
+## 通过 npx 运行（MCP 生态通用形态）
+
+已按 npm 生态的要求打包：`bin` 指向编译产物，`dist/` 随包发布，`prepare` 保证发布前自动构建。
+
+```bash
+WECHAT_APP_ID=xxx WECHAT_APP_SECRET=xxx npx -y wechat-draft-mcp@0.2.0
+```
+
+宿主（豆包工作 / WorkBuddy / 其他 MCP 客户端）里的 stdio 配置：
+
+```jsonc
+{
+  "mcpServers": {
+    "wechat-draft": {
+      "command": "npx",
+      "args": ["-y", "wechat-draft-mcp@0.2.0"],
+      "env": { "WECHAT_APP_ID": "...", "WECHAT_APP_SECRET": "..." }
+    }
+  }
+}
+```
+
+发布前自检（不发布）：
+
+```bash
+npm run check:pack    # typecheck + 测试 + npm pack --dry-run（打印将要发布的文件清单）
+```
+
+包内只有 `dist/`、`skills/`、`README.md`、`LICENSE`（测试、HANDOFF、调研产物都不进包）。
+
 ## 命令
 
 ```bash
@@ -66,13 +96,14 @@ node --env-file=.env dist/cli.js upload  "/绝对路径/文章目录"
 ## 测试
 
 ```bash
-npm test          # 编译 src+tests 到 dist-test/，跑 106 项测试（约 2 秒）
+npm test          # 编译 src+tests 到 dist-test/，跑 112 项测试（约 3 秒）
 npm run test:only # 跳过编译，直接重跑
 ```
 
 零额外依赖（node 内置 test runner），不联网、不碰真实公众号：mock 微信服务器是
 本地 HTTP 服务，覆盖文章包解析、内容指纹幂等、`creating` 状态锁定、路径沙箱、
-错误码分类，以及 MCP stdio 通道的 **stdout 纯净性**（协议不能被日志污染）。
+错误码分类、MCP stdio 通道的 **stdout 纯净性**，以及**完整上传链路**（子进程 + JSON-RPC +
+真上传，请求经测试侧 fetch 拦截器改送到本地 mock —— 产品代码不提供改接口地址的开关）。
 
 ## 边界
 

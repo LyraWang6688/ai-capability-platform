@@ -6,13 +6,19 @@
  * 所以这里逐行断言 stdout 全是合法 JSON-RPC。
  */
 import assert from "node:assert/strict";
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { after, before, describe, test } from "node:test";
-import { StdioMcpClient, nodeEnv, srcFile } from "./helpers/spawnNode.js";
+import { StdioMcpClient, assertStdoutPristine, nodeEnv, srcFile } from "./helpers/spawnNode.js";
 import { makeTempDir, writeBundle, type TempDir } from "./helpers/fixtures.js";
 
 const SERVER = srcFile("mcpServer.js");
 const TOOL_NAMES = ["get_wechat_draft", "inspect_wechat_article", "upload_wechat_draft", "wechat_draft_status"];
+const PACKAGE_VERSION = (
+  JSON.parse(
+    await readFile(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8")
+  ) as { version: string }
+).version;
 
 async function startClient(extraEnv: Record<string, string | undefined> = {}): Promise<StdioMcpClient> {
   const client = new StdioMcpClient([SERVER], nodeEnv(extraEnv));
@@ -22,17 +28,12 @@ async function startClient(extraEnv: Record<string, string | undefined> = {}): P
     clientInfo: { name: "wdmcp-tests", version: "0.0.0" }
   });
   assert.equal(initialized.error, undefined, `initialize 失败：${JSON.stringify(initialized.error)}`);
+  // 握手广播的版本必须与 package.json 一致，否则宿主看到的版本是错的
+  const serverInfo = (initialized.result as { serverInfo?: { name?: string; version?: string } } | undefined)?.serverInfo;
+  assert.equal(serverInfo?.name, "wechat-draft-mcp");
+  assert.equal(serverInfo?.version, PACKAGE_VERSION, "握手版本与 package.json 不一致");
   client.notify("notifications/initialized");
   return client;
-}
-
-/** stdout 纯净性：每一行都必须是合法 JSON-RPC 消息。 */
-function assertStdoutPristine(client: StdioMcpClient): void {
-  assert.deepEqual(client.nonJsonLines, [], `stdout 混入了非 JSON 内容：${client.nonJsonLines.join("\n")}`);
-  for (const line of client.stdoutLines) {
-    const message = JSON.parse(line) as { jsonrpc?: string };
-    assert.equal(message.jsonrpc, "2.0", `stdout 里混入了非 JSON-RPC 消息：${line}`);
-  }
 }
 
 describe("mcpServer：stdio 协议", () => {

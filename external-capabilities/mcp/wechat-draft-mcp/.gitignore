@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-test/
+# npm pack 产物（本地验证用，不进版本库）
+*.tgz
 # 连通性验证用的测试文章包（含图片与元数据，不进版本库）
 smoke-article/
 .env
