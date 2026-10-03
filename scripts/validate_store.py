@@ -25,9 +25,13 @@ Checks:
     4.  skill registry required fields (name/path/status/version/updated,
         + project for projects entries), map key == name, version X.Y.Z,
         updated YYYY-MM-DD, status legal
-    5.  skill path validation: relative path, no ../ escape, directory,
-        under the correct domain prefix, leaf == skill name,
-        package contains SKILL.md and agents/openai.yaml
+    5.  skill path validation: relative path, no ../ escape, directory, FLAT
+        layout (exactly skills/<name>/), leaf == skill name, package contains
+        SKILL.md and agents/openai.yaml
+    5b. SKILL.md frontmatter validation against the external closed schema
+        (only name/description/license/compatibility/metadata/allowed-tools;
+        name == registry key; description non-empty) — the Store's proxy for
+        the ecosystem gate, so a skill that cannot be installed cannot pass
     6.  registry <-> filesystem symmetry: a skill package directory on disk
         without a registry entry FAILS (and vice versa)
     7.  duplicate skill identity across projects/shared FAILS
@@ -102,23 +106,33 @@ ALLOWED_SKILL_STATUSES = {"draft", "testing", "active", "deprecated", "archived"
 # the on-disk layout is flat (`skills/<name>/`) because Agent Plugins v1 requires
 # `skills/` immediate children and forbids recursive discovery.
 ALLOWED_SKILL_SCOPES = {"shared", "project"}
+# The Agent Skills specification defines a CLOSED frontmatter schema: exactly
+# these six top-level fields. The reference validator (`skills-ref`) rejects a
+# skill outright for any extra field -- so a skill that adds e.g. `version`
+# would pass every Store check and then silently fail to install. Enforcing the
+# same whitelist here closes that gap. See SKILL-FORMAT.md §2.
+ALLOWED_SKILL_FRONTMATTER = {
+    "name", "description", "license", "compatibility", "metadata", "allowed-tools",
+}
 ALLOWED_CAPABILITY_TYPES = {"plugin", "mcp", "connector", "cli", "external-api", "integration"}
 ALLOWED_CAPABILITY_STATUSES = {"available", "limited", "disabled", "unknown"}
 
 KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Leading YAML frontmatter block: --- ... --- at the very start of SKILL.md.
+FRONTMATTER_RE = re.compile(r"^---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)", re.DOTALL)
 
 REQUIRED_POLICY_FILES = [
     "AGENTS.md",
     "CONTRIBUTING_AI.md",
     "PUBLISHING.md",
     "VERSIONING.md",
+    "SKILL-FORMAT.md",
     "registry.yaml",
     "skills/README.md",
     "skills/registry.yaml",
     "skills/LIFECYCLE.md",
-    "skills/VERSIONING.md",
     "skills/ACCEPTANCE.md",
     "external-capabilities/README.md",
     "external-capabilities/registry.yaml",
@@ -383,6 +397,70 @@ def validate_skill_path(key: str, entry: dict) -> None:
               os.path.isfile(os.path.join(abs_path, "agents", "openai.yaml")), path)
 
 
+def validate_skill_frontmatter(key: str, skill_dir: str) -> None:
+    """Validate SKILL.md frontmatter against the external closed schema.
+
+    This is the Store's proxy for the ecosystem gate. Without it the Store could
+    report "all checks pass" for a skill that `skills-ref validate` rejects --
+    i.e. certify an asset that cannot be installed. See SKILL-FORMAT.md §2."""
+    label = f"skill {key} frontmatter"
+    path = os.path.join(skill_dir, "SKILL.md")
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            head = fh.read(16384)
+    except OSError as exc:
+        check(f"{label} readable", False, str(exc)[:80])
+        return
+    match = FRONTMATTER_RE.match(head)
+    check(f"{label} block present", bool(match),
+          "SKILL.md must begin with a --- YAML frontmatter block")
+    if not match:
+        return
+    try:
+        fm = yaml.load(match.group(1), Loader=UniqueKeyLoader)
+    except Exception as exc:  # noqa: BLE001 (includes duplicate-key error)
+        check(f"{label} parses", False, str(exc)[:120])
+        return
+    if not isinstance(fm, dict):
+        check(f"{label} is a mapping", False, type(fm).__name__)
+        return
+
+    extra = sorted(set(fm.keys()) - ALLOWED_SKILL_FRONTMATTER)
+    check(f"{label} uses only allowed fields", not extra,
+          f"not allowed by the Agent Skills spec: {extra}; "
+          f"allowed: {sorted(ALLOWED_SKILL_FRONTMATTER)}")
+
+    name = fm.get("name")
+    check(f"{label} name present", isinstance(name, str) and bool(name), repr(name))
+    if isinstance(name, str):
+        check(f"{label} name == registry key", name == key, f"name={name!r} key={key!r}")
+        check(f"{label} name kebab-case", bool(KEBAB_RE.match(name)), name)
+        check(f"{label} name length <= 64", len(name) <= 64, f"{len(name)} chars")
+
+    desc = fm.get("description")
+    check(f"{label} description present",
+          isinstance(desc, str) and bool(desc.strip()), repr(desc)[:60])
+    if isinstance(desc, str):
+        check(f"{label} description length 1-1024", 1 <= len(desc) <= 1024,
+              f"{len(desc)} chars")
+
+    compat = fm.get("compatibility")
+    if compat is not None:
+        check(f"{label} compatibility is a string", isinstance(compat, str),
+              type(compat).__name__)
+        if isinstance(compat, str):
+            check(f"{label} compatibility length 1-500", 1 <= len(compat) <= 500,
+                  f"{len(compat)} chars")
+
+    meta = fm.get("metadata")
+    if meta is not None:
+        ok_meta = isinstance(meta, dict) and all(
+            isinstance(k, str) and isinstance(v, str) for k, v in meta.items())
+        check(f"{label} metadata is a string -> string map", ok_meta, repr(meta)[:80])
+
+
 def validate_capability_entries(reg: dict):
     """Validate capability record schema. Returns list of (key, entry)."""
     caps = reg.get("capabilities")
@@ -574,6 +652,9 @@ def main() -> int:
               f"allowed={sorted(allowed)}")
     for key, entry in skill_entries:
         validate_skill_path(key, entry)
+        skill_path = entry.get("path")
+        if isinstance(skill_path, str) and skill_path:
+            validate_skill_frontmatter(key, os.path.join(ROOT, skill_path))
 
     # ---- 6. Registry <-> filesystem symmetry ----
     registered_paths = set()

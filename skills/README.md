@@ -90,7 +90,8 @@ See [LIFECYCLE.md](./LIFECYCLE.md) for transition rules.
 
 ## Versioning
 
-Semantic `X.Y.Z` per skill. See [VERSIONING.md](./VERSIONING.md).
+Semantic `X.Y.Z` per skill, recorded **only** in `skills/registry.yaml` —
+never in `SKILL.md`. See [`../VERSIONING.md`](../VERSIONING.md).
 
 ## Acceptance
 

@@ -36,12 +36,17 @@ At least:
 
 - correct placement (flat layout: `skills/<name>/` — one level, no nesting)
 - `SKILL.md` present
+- `SKILL.md` frontmatter valid — see `SKILL-FORMAT.md` §2:
+  only the six allowed top-level fields (`name` / `description` / `license` /
+  `compatibility` / `metadata` / `allowed-tools`); `name` == directory name;
+  `description` non-empty
 - `agents/openai.yaml` present
 - registry entry present and valid (key == name, required fields complete)
 - valid version (`X.Y.Z`)
 - valid lifecycle (`draft | testing | active | deprecated | archived`)
 - no broken required path
-- `python3 scripts/validate_store.py` PASS
+- `npx skills-ref validate <path>` PASS (ecosystem layer)
+- `python3 scripts/validate_store.py` PASS (Store layer)
 
 ## Gate 1 — Trigger Quality
 

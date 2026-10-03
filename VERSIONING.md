@@ -1,12 +1,37 @@
-# Store-Level Versioning — X.Y.Z (single Source of Truth)
+# Versioning — X.Y.Z (Store Contract)
 
-This file is the **Store-wide** versioning contract for all assets (Skills and
-External Capabilities). Skill-specific versioning semantics supplement this
-file and live in `skills/VERSIONING.md`; no duplicate SemVer rules are kept.
+This is the **Store-wide** versioning contract for every asset (Skills and
+External Capabilities). There is exactly one such file — the former
+`skills/VERSIONING.md` supplement is merged here, so no duplicate rules exist.
 
-## 1. Stable Machine Identifier
+## 0. This does not conflict with the external standards
 
-Every asset has a stable machine identifier:
+The external standards ([agentskills.io](https://agentskills.io/specification),
+[agent-plugins.org](https://agent-plugins.org/specification)) govern **what a
+single asset looks like**. This file governs **how versions are managed across
+the many assets in one repository** — a question those standards do not answer.
+
+The two layers only collide in one place: writing `version` into a `SKILL.md`.
+§1 settles that.
+
+## 1. Where `version` lives (the single most important rule here)
+
+| Location | Allowed? | Why |
+|---|---|---|
+| Domain registry (`skills/registry.yaml`, `external-capabilities/registry.yaml`) | ✅ **the only source of truth** | Store governance state |
+| `SKILL.md` frontmatter, top level | ❌ **forbidden** | not in the external whitelist — the reference validator rejects the whole skill |
+| `SKILL.md` `metadata.version` | 🟡 legal, but do not use | would duplicate the registry → two sources of truth |
+
+**Version is recorded in the domain registry and nowhere else.**
+
+Rationale: the ecosystem does **not** use version numbers to decide whether an
+asset changed. It uses **content hashes** (see the `skills` CLI lock file) and
+immutable git refs. A version number is a human-facing communication label, not
+a machine contract — so it belongs to the Store's registry, not to the skill file.
+
+## 2. Stable Machine Identifier
+
+Every asset has one stable machine identifier, and it is also the directory name:
 
 ```text
 repo-hygiene
@@ -21,16 +46,20 @@ repo-hygiene-v2/
 repo-hygiene-final/
 ```
 
-## 2. Canonical Path Is Stable
+The identifier must equal the parent directory name and the registry map key
+(enforced by `scripts/validate_store.py`).
+
+## 3. Canonical Path Is Stable
 
 ```text
 skills/repo-hygiene/
 external-capabilities/mcp/feishu-cli-mcp-server/
 ```
 
-Upgrading the version does NOT change the directory.
+Upgrading the version does NOT change the directory. This is what keeps every
+consumer's reference valid across upgrades.
 
-## 3. Semantic Versioning
+## 4. Semantic Versioning
 
 ```text
 MAJOR.MINOR.PATCH
@@ -42,19 +71,26 @@ MAJOR.MINOR.PATCH
 | MINOR | backward-compatible capability addition |
 | MAJOR | breaking change / incompatible behavior |
 
-## 4. Registry `version` = Current Store-Recommended Version
+**Lifecycle coupling** (`skills` domain only):
 
-`version` in a Domain registry means: the version the Store currently
-recommends for use. It is the default for consumers.
+```text
+0.x.x   experimental / draft / testing
+1.x.x+  active and stable enough for normal use
+```
 
-## 5. `main` = Current Maintained State
+A skill whose `status` is `active` MUST have `major >= 1`
+(enforced by `scripts/validate_store.py`).
 
-`main` holds the latest state currently being maintained. Registries on `main`
-describe the current recommended versions.
+## 5. Registry `version` = Current Store-Recommended Version
+
+`version` in a domain registry means: **the version the Store currently
+recommends for use** — the default for consumers.
+
+It is **not** "the newest version that exists". They differ when a newer version
+is still experimental, or a recent one has a regression. `main` holds the
+current maintained state; its registries describe the recommended versions.
 
 ## 6. Immutable Historical Versions = Namespaced Git Tags
-
-Use namespaced Git Tags:
 
 ```text
 <asset-name>-vX.Y.Z
@@ -68,20 +104,24 @@ feishu-cli-mcp-server-v0.1.0
 ```
 
 Do NOT use a monorepo-wide tag such as `v0.1.0` — multiple assets would collide.
+One repository holds many assets, so every tag carries the asset name.
 
-## 7. GitHub Releases
+A tag is a permanent label on a commit. "Rolling back to `v4.6.0`" means
+checking out that tag — it does **not** delete later versions; they remain in
+history.
+
+## 7. Consumer Version Policy
+
+- **Default**: use the version currently recommended in the registry.
+- **Reproducible builds**: pin to a specific immutable git tag.
+
+## 8. GitHub Releases
 
 Releases are for finished artifacts that need to be downloadable/distributable.
 Do NOT force a Release for every internal experimental version.
 
-## 8. Consumer Version Policy
-
-- Default: use the version currently recommended in the Registry.
-- Consumers / projects that need stable reproduction may pin to a specific
-  immutable Git Tag.
-
 ## 9. Stable ID
 
-Brand copy / display names may change. Machine identifiers stay stable.
-Do NOT create a new machine asset identity because of a logo / copy / display-name
-change. Machine-ID migration is deferred until a real need exists.
+Brand copy and display names may change. **Machine identifiers stay stable.**
+Do NOT create a new machine asset identity because of a logo, copy, or
+display-name change. Machine-ID migration is deferred until a real need exists.

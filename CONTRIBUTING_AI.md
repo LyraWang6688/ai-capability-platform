@@ -131,7 +131,7 @@ Each contribution touches exactly the files its stated goal requires.
 ## Domain-Specific Rules
 
 - Contributing a **Skill** → read `skills/**` policy:
-  `skills/LIFECYCLE.md`, `skills/VERSIONING.md`, `skills/ACCEPTANCE.md`
+  `skills/LIFECYCLE.md`, `skills/ACCEPTANCE.md` (plus `SKILL-FORMAT.md` and `VERSIONING.md` at the root)
 - Contributing an **External Capability** → read `external-capabilities/**` policy:
   `external-capabilities/SECURITY.md`
 - Modifying **dependencies** between the two → read `dependencies/capability-map.yaml`

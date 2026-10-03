@@ -81,12 +81,12 @@ ai-capability-store/
 ├── CONTRIBUTING_AI.md             # Public contribution rules
 ├── PUBLISHING.md                  # Asset Publishing Protocol
 ├── VERSIONING.md                  # Store-wide versioning contract
+├── SKILL-FORMAT.md                # Asset format contract (external spec + Store additions)
 ├── registry.yaml                  # Top-level Store Router
 ├── skills/                         # Domain A: Skills (how to do)
 │   ├── README.md
 │   ├── registry.yaml
 │   ├── LIFECYCLE.md
-│   ├── VERSIONING.md              # Skill-specific supplement
 │   ├── ACCEPTANCE.md
 │   └── <skill-name>/               # flat: one directory per skill, no nesting
 ├── external-capabilities/          # Domain B: External Capabilities (what can be called)
